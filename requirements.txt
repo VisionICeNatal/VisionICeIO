@@ -1,0 +1,6 @@
+ipywidgets
+matplotlib
+numcodecs
+numpy
+xarray
+zarr

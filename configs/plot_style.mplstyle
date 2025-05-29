@@ -1,0 +1,173 @@
+# Last Adapted: 07.05.2025
+# 20.04.2025: Reduce Figsize so it fits on A4 (vertically); min. font to 8 for readability
+# 07.05.2025: Increase visibility of grid (if activated)
+
+## LINES
+lines.linewidth:       0.5               # line width in points  # FS: 1.5 -> 0.5
+lines.markeredgewidth: 0.5        # line width around marker symbol  # FS: 1.0 -> 0.75
+lines.markersize:      3           # marker size, in points  # FS: 6 -> 3
+
+
+## PATCHES
+## changed linewidth for consistency
+patch.linewidth:       0.75     # edge width in points. # FS: 1.0 -> 0.75
+
+
+## HATCHES
+## changed linewidth for consistency
+hatch.linewidth: 0.5  # FS: 1.0 -> 0.5
+
+
+## BOXPLOT
+boxplot.showbox:                    False  # FS: True -> False (declutter)
+boxplot.boxprops.linewidth: 0.5     # FS: 1.0 -> 0.5  # should do nothing, showbox=False
+
+boxplot.flierprops.color:           grey  # FS: black -> grey
+boxplot.flierprops.marker:          o
+boxplot.flierprops.markersize:      0.3  # FS: 6 -> 0.3
+boxplot.flierprops.markeredgecolor: grey  # FS: black -> grey
+boxplot.flierprops.markeredgewidth: 0.3  # FS: 1.0 -> 0.3
+boxplot.flierprops.linewidth:       0.3  # FS: 1.0 -> 0.3
+## flierprops.linewidth should do nothing since flierprops.linestyle = none
+
+boxplot.whiskerprops.color:     lightgrey  # FS: black -> lightgrey
+boxplot.whiskerprops.linewidth: 0.5  # FS: 1.0 -> 0.5
+
+boxplot.capprops.color:     grey  # FS: black -> grey
+boxplot.capprops.linewidth: 0.5  # FS: 1.0 -> 0.5
+
+boxplot.medianprops.color:     black  # FS: C1 -> black
+boxplot.medianprops.linewidth: 0.5  # FS: 1.0 -> 0.5
+
+
+## FONT
+font.weight:  300  # FS: normal (=400) -> 300
+font.size:    8    # FS: 10.0 -> 8
+
+
+## TEXT
+text.color: black
+
+
+## AXES
+axes.linewidth:     0.5  # edge line width  # FS: 0.8 -> 0.5
+axes.edgecolor:     dimgrey   # axes edge color  # FS: black -> dimgrey
+
+axes.titlelocation: left  # alignment of the title  # FS: center -> left
+axes.titlesize:     small   # font size of the axes title # FS: large -> small
+axes.titleweight:   light  # font weight of title  # FS: normal -> light
+axes.titlepad:      2     # pad between axes and title in points  # FS: 6 -> 3
+
+axes.labelsize:     x-small  # font size of the x and y labels  # FS: medium -> x-small
+axes.labelweight:   light  # weight of the x and y labels # FS: normal -> light
+axes.labelcolor:    black
+
+axes.grid:          False   # display grid or not
+## rethink grid!
+
+## rethink!
+#axes.prop_cycle: cycler('color', ['1f77b4', 'ff7f0e', '2ca02c', 'd62728', '9467bd', '8c564b', 'e377c2', '7f7f7f', 'bcbd22', '17becf'])
+                  # color cycle for plot lines as list of string color specs:
+                  # single letter, long name, or web-style hex
+                  # As opposed to all other parameters in this file, the color
+                  # values must be enclosed in quotes for this parameter,
+                  # e.g. '1f77b4', instead of 1f77b4.
+                  # See also https://matplotlib.org/tutorials/intermediate/color_cycle.html
+                  # for more details on prop_cycle usage.
+
+
+## TICKS
+xtick.major.size:    3         # major tick size in points  # FS: 3.5 -> 3
+xtick.minor.size:    1.8       # minor tick size in points  # FS: 2 -> 1.8
+xtick.major.width:   0.6       # major tick width in points  # FS: 0.8 -> 0.6
+xtick.minor.width:   0.4       # minor tick width in points  # FS: 0.6 -> 0.4
+xtick.labelsize:     small     # font size of the tick labels  # FS: medium -> small
+xtick.color:         dimgrey   # color of the ticks  # FS: black -> dimgrey
+xtick.labelcolor:    black     # to avoid inheritance from ytick.color  # FS: -> black
+
+ytick.major.size:    3         # major tick size in points  # FS: 3.5 -> 3
+ytick.minor.size:    1.8       # minor tick size in points  # FS: 2 -> 1.8
+ytick.major.width:   0.6       # major tick width in points  # FS: 0.8 -> 0.6
+ytick.minor.width:   0.4       # minor tick width in points  # FS: 0.6 -> 0.4
+ytick.labelsize:     small     # font size of the tick labels  # FS: medium -> small
+ytick.color:         dimgrey   # color of the ticks  # FS: black -> dimgrey
+ytick.labelcolor:    black     # to avoid inheritance from ytick.color  # FS: -> black
+
+
+## GRIDS
+## only if explicitly activated
+grid.color:     lightgray     # grid color  # FS: "#b0b0b0" -> lightgray
+grid.linestyle: -            #  FS: - -> -
+grid.linewidth: 0.5           # in points  # FS: 0.8 -> 0.5
+grid.alpha:     0.7           #  FS: 1 -> 0.7
+
+
+## LEGEND
+legend.loc:           best
+legend.frameon:       False   # draw the legend on a background patch
+legend.edgecolor:     0.6     # background patch boundary color  # FS: 0.8 -> 0.6
+legend.framealpha:    0.6     # legend patch transparency # FS: 0.8 -> 0.6
+legend.markerscale:   1.0     # the relative size of legend markers vs. original
+legend.fontsize:      small   # FS: medium -> small (if font=8 -> 6.664)
+
+
+## FIGURE
+figure.titlesize:       large     # size fig.suptitle # if fontsize=8 -> 9.6
+figure.titleweight:        100     # weight of the figure title  # FS: normal -> 100
+figure.labelsize:        medium  # size of fig.sup[x|y]label()  # FS: large -> medium; bei fontsize=8->8 
+figure.labelweight: light    # weight of the figure label  # FS: normal -> light
+# figure.figsize:     9, 4  # figure size in inches  # FS: 6.4, 4.8 -> 9, 4
+# A4 Seite Vertikal hat ca. 170mm Schriftfeld (der Rest sind Ränder)
+# 170mm sind 6.692913 inch -> Deswegen wieder figsize auf 6.6, 4,4 (1.5:1)
+figure.figsize:  6.6, 4.4
+figure.dpi:         300       # figure dots per inch  # FS: 100 -> 300
+figure.frameon:     False      # enable figure frame  # FS: True -> False
+figure.autolayout: True  # automatically use `tight_layout`  # FS: False -> True
+
+
+## IMAGES
+## rethink color!
+#image.cmap:            viridis      # A colormap name (plasma, magma, etc.)
+#image.lut:             256          # the size of the colormap lookup table
+image.composite_image: False  # When True, all the images on a set of axes are
+                              # combined into a single composite image before
+                              # saving a figure as a vector graphics file,
+                              # such as a PDF.
+## HISTOGRAM PLOTS
+hist.bins: 20  # The default number of histogram bins or 'auto'.  # FS: 10 -> 20
+
+
+## SCATTER PLOTS
+#scatter.marker: o         # The default marker type for scatter plots.
+#scatter.edgecolors: face  # The default edge colors for scatter plots.
+
+
+## PATHS
+path.simplify: True  # When True, simplify paths by removing "invisible"
+                     # points to reduce file size and increase rendering
+                     # speed
+path.simplify_threshold: 0.1  # The threshold of similarity below
+                                          # which vertices will be removed in
+                                          # the simplification process.
+
+
+## SAVING FIGURES
+savefig.dpi:       figure      # figure dots per inch or 'figure'
+savefig.format:    png         # {png, ps, pdf, svg}
+pdf.compression:    9  # integer from 0 to 9  # FS: 6 -> 9
+#pdf.fonttype:       3  # Output Type 3 (Type3) or Type 42 (TrueType)
+
+
+## COMMENTS
+# font_scalings = {
+#     'xx-small': 0.579,
+#     'x-small':  0.694,
+#     'small':    0.833,
+#     'medium':   1.0,
+#     'large':    1.200,
+#     'x-large':  1.440,
+#     'xx-large': 1.728,
+#     'larger':   1.2,
+#     'smaller':  0.833,
+#     None:       1.0,
+# }
