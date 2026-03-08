@@ -1,0 +1,5 @@
+/* Remove background fill from Mermaid edge labels */
+.edgeLabel rect {
+    fill: transparent !important;
+    stroke: none !important;
+}

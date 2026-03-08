@@ -1,44 +1,180 @@
 # VisionICeIO
 
+I/O utilities for the [ICe Vision Lab](https://github.com/VisionICeNatal)
+(Natal, Brazil) LabView recording system.
 
-IO Operations to read the data of the Vision Lab in Natal.
+VisionICeIO reads the binary files produced by the lab's LabView acquisition
+software, wraps all data channels into a single
+[xarray](https://docs.xarray.dev/) `Dataset`, and optionally persists the
+result as a compressed [Zarr](https://zarr.dev/) store for fast reloading.
 
+## Features
 
-## Python Functions and Experiment Classes to read the LabView data
+- **Two file generations** -- reads both old DLTG-header files and new
+  headerless LabView binaries; auto-detects which format is present.
+- **Spike data** -- spike timestamps, waveform snippets, spike counts.
+- **Continuous data** -- LFP / analog traces, stimulus labels.
+- **Metadata** -- plain-text (`-ifo.txt`), binary DLTG (`.ifo`), and
+  PTH0 (`.info`) metadata files.
+- **Behaviour** -- old `.bhv` and new `.behave` files.
+- **Spike sorting I/O** -- read / write `.ssort` files; attach cluster
+  labels to the dataset from file or directly from memory.
+- **xarray integration** -- all channels in one `xr.Dataset` with named
+  dimensions and physical coordinates (seconds).
+- **Zarr persistence** -- save as a compressed Zarr store; reload later
+  without re-parsing the raw binaries.
 
-1. In gerenal this is a Python implementation of the Spike2Fieldtrip Implementation reading the LabView data in Matlab.
-2. Experiment class to build a wrapper around all data parts (spike times, spike waveforms, analog data, etc.)
-3. The current implementation reads the metadata from the metadata *text file* (not binary file) (`...-ifo.txt`).
-4. Currently, the following binary files are read:
-   
-   - `.ana` files: analog LFP data
-   - `.spi` files: spike times (not sorted)
-   - `.swa` files: spike waveforms (not sorted)
-   - `.stm` files: stimulus labels (for each trial); the encoding for the label need to be extracted from the lab notebooks
+## Installation
 
+```bash
+pip install visioniceio
+```
 
-### TODOs
+For development (editable install with extras):
 
-- [ ] Read `.swave` data
-- [ ] Create `.ssort` export
-- [ ] Rethink if we want to have the code as installable package or not
+```bash
+git clone https://github.com/VisionICeNatal/VisionICeIO.git
+cd VisionICeIO
+pip install -e ".[dev,test,docs]"
+```
 
+### Requirements
 
-## Remarks
+Python >= 3.10, plus `numpy`, `xarray`, `zarr`, and `numcodecs`.
+Both Zarr v2 and v3 are supported.
 
-*In lack of proper documentation written here.*
+## Quick Start
 
-The code is currently splitted into two parts:
+### Load an experiment
 
-1. `core_io.py`: the core IO functions to read the binary data and the metadata text file
-2. `experiment.py`: the experiment class to wrap the data and provide a convenient interface to access the data
+```python
+from visioniceio import Experiment
 
-An experiment currently consists of multiple trials, for each trial the analog data, spike times, spike waveforms and stimulus labels are stored.
+exp = Experiment()
+exp.load_from_dir(path="/path/to/data", name="c5607a07")
 
-The current implementation of the Experiment class organises the data in an xarray Dataset, with common dimensions for the trials, channels, snippet time (for spike waveforms) and lfp_time (for analog data).
-Snippet time and analog time are different, as the spike trace and the LFP trace have different sampling rates.
+ds = exp.data          # xr.Dataset
+ds
+```
 
-![Overview of the Experiment Data Structure (XArray)](./images/experiment_structure_xarray.png)
+```
+<xarray.Dataset>
+Dimensions:    (electrodes: 64, trials: 240, spikes_idx: 312,
+                snippet_time: 48, lfp_time: 50000)
+Data variables:
+    waveforms   (electrodes, trials, spikes_idx, snippet_time)  float32
+    spike_times (electrodes, trials, spikes_idx)                 float32
+    n_spikes    (electrodes, trials)                              int32
+    stim_label  (trials)                                          int32
+    lfp         (electrodes, trials, lfp_time)                    int16
+```
 
-Unfortunately, at the current state, the xarray Dataset does not allow inhomogeneous axes, so the spike times and waveforms need to be padded to the maximum occuring number of spikes in per trial per channel.
-This is not very memory efficient, but I currently failed to implement a better solution, e.g. using akward arrays etc.
+### Work with the data
+
+```python
+# Waveforms for electrode 0, trial 5
+wf = ds.waveforms.sel(electrodes=0, trials=5)
+
+# All spike times for one electrode
+st = ds.spike_times.sel(electrodes=0)
+
+# LFP filtered by stimulus condition
+lfp_cond1 = ds.lfp.sel(trials=ds.stim_label == 1)
+```
+
+### Reload from Zarr
+
+When `save_as='zarr'` (the default), the dataset is persisted as a
+compressed Zarr store next to the raw files:
+
+```python
+from visioniceio import load_from_zarr
+
+ds = load_from_zarr("/path/to/data/c5607a07.zarr")
+```
+
+### Spike sorting results
+
+```python
+# Load from a .ssort file (stores on exp.data['cluster_labels'])
+records = exp.load_ssort()
+
+# -- or -- import directly from memory (no file needed)
+records = exp.import_sorting_results(
+    labels_per_record=labels,
+    spike_indices_per_record=spike_idx,
+)
+
+# -- or -- write to disk, then attach
+filepath = exp.save_ssort(
+    labels_per_record=labels,
+    spike_indices_per_record=spike_idx,
+)
+
+# Cluster labels are now part of the dataset
+exp.data['cluster_labels']  # (electrodes, trials, spikes_idx) float32
+```
+
+## Binary Formats
+
+Two file generations are supported:
+
+| Format | Extensions | Header |
+|--------|-----------|--------|
+| Old (DLTG) | `.swa`, `.spi`, `.stm`, `.ana`, `.ifo`, `.bhv` | 4-byte `DTLG` magic + offset table |
+| New (headerless) | `.swave`, `.spike`, `.stim`, `.analog`, `.behave`, `.info` | None (sequential records) |
+| Sorting | `.ssort` | Per-record count + field table |
+
+`Experiment.load_from_dir()` checks for each data type's new-format file
+first (e.g. `.spike` before `.spi`). Each data type resolves independently,
+so a mix of old and new files is supported.
+
+See the [data format specification](https://VisionICeNatal.github.io/VisionICeIO/data_format.html)
+for the full binary layout.
+
+## API Quick Reference
+
+### High-level (`Experiment`)
+
+| Method | Description |
+|--------|-------------|
+| `Experiment.load_from_dir()` | Load all channels into `xr.Dataset` (optionally save as Zarr) |
+| `Experiment.load_ssort()` | Read `.ssort` file, attach to dataset |
+| `Experiment.save_ssort()` | Write `.ssort` file, attach to dataset |
+| `Experiment.import_sorting_results()` | Attach sorting results from memory (no file I/O) |
+
+### Low-level readers (`core_io`)
+
+| Function | Description |
+|----------|-------------|
+| `read_spike_new()` | New-format `.spike` file |
+| `read_swave_new()` | New-format `.swave` file |
+| `read_stim_new()` | New-format `.stim` file |
+| `read_behave_new()` | New-format `.behave` file |
+| `read_analog_new()` | New-format `.analog` file |
+| `read_data()` | Old DLTG container (`.swa`, `.spi`, `.stm`, `.ana`) |
+| `read_metadata()` | Plain-text `-ifo.txt` |
+| `read_metadata_ifo()` | Binary DLTG `.ifo` |
+| `read_info_new()` | Binary PTH0 `.info` |
+| `read_bhv()` | Old DLTG `.bhv` behaviour file |
+| `read_ssort()` / `write_ssort()` | Low-level `.ssort` I/O |
+| `load_from_zarr()` | Reopen a saved Zarr store |
+
+## Examples
+
+Two Jupyter notebooks are included under `examples/`:
+
+- **`example_data_loading.ipynb`** -- exercises every public function with
+  synthetic data (no real data files needed).
+- **`real_data_exploration.ipynb`** -- template for exploring a real
+  experiment directory.
+
+## Documentation
+
+Full API reference, developer guide, and binary format specification:
+
+[https://VisionICeNatal.github.io/VisionICeIO/](https://VisionICeNatal.github.io/VisionICeIO/)
+
+## License
+
+AGPL-3.0-only
