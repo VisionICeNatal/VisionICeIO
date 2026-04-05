@@ -465,6 +465,27 @@ class Experiment:
             self._attach_bhv()
 
     # ------------------------------------------------------------------
+    # Raw spike index access
+    # ------------------------------------------------------------------
+
+    def load_spike_indices(self) -> list[np.ndarray]:
+        """Load per-record spike index arrays from ``.spike`` or ``.spi`` file.
+
+        Automatically detects the file format (new ``.spike`` vs legacy
+        ``.spi``).  Records are in trial-major, channel-minor order:
+        ``record_index = trial * n_electrodes + channel``.
+
+        Returns:
+            List of 1-D arrays, one per record, containing spike sample
+            indices as int32.
+
+        Raises:
+            FileNotFoundError: If neither ``.spike`` nor ``.spi`` file exists.
+        """
+        spike_data = self._read_raw('spike')
+        return [arr.astype(np.int32) for arr in spike_data]
+
+    # ------------------------------------------------------------------
     # Spike-sorting convenience wrappers
     # ------------------------------------------------------------------
 
