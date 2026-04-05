@@ -4,24 +4,22 @@ from importlib.metadata import version as _pkg_version
 
 __version__ = _pkg_version("visioniceio")
 
-from .core_io import (
-    read_metadata,
-    read_metadata_ifo,
-    read_info_new,
+from .experiment import Experiment
+from .io import (
+    load_from_zarr,
+    read_analog_new,
+    read_behave_new,
     read_bhv,
     read_data,
-    load_from_zarr,
-    # New format readers
+    read_info_new,
+    read_metadata,
+    read_metadata_ifo,
     read_spike_new,
-    read_swave_new,
-    read_stim_new,
-    read_behave_new,
-    read_analog_new,
-    # Sorting results
     read_ssort,
+    read_stim_new,
+    read_swave_new,
     write_ssort,
 )
-from .experiment import Experiment
 
 __all__ = [
     "read_metadata",

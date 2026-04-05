@@ -23,13 +23,13 @@ flowchart LR
         F5[".info / .ifo / -ifo.txt"]
     end
 
-    subgraph coreio ["core_io readers"]
+    subgraph iopkg ["io subpackage"]
         direction TB
-        R1["read_spike_new<br/>read_data"]
-        R2["read_swave_new<br/>read_data"]
-        R3["read_stim_new<br/>read_data"]
-        R4["read_analog_new<br/>read_data"]
-        R5["read_info_new<br/>read_metadata_ifo<br/>read_metadata"]
+        R1["spike: read_spike_new<br/>read_data"]
+        R2["waveform: read_swave_new<br/>read_data"]
+        R3["stim: read_stim_new<br/>read_data"]
+        R4["analog: read_analog_new<br/>read_data"]
+        R5["metadata: read_info_new<br/>read_metadata_ifo<br/>read_metadata"]
     end
 
     EXP["Experiment<br/>load_from_dir()"]

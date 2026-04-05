@@ -10,7 +10,7 @@ import os
 import numpy as np
 import xarray as xr
 
-from .core_io import (
+from .io import (
     read_analog_new,
     read_behave_new,
     read_bhv,
@@ -476,7 +476,7 @@ class Experiment:
 
         Args:
             records: List of per-channel-trial dicts as returned by
-                :func:`~visioniceio.core_io.read_ssort` or built by
+                :func:`~visioniceio.io.sorting.read_ssort` or built by
                 :meth:`import_sorting_results`.
         """
         self.sorting_results = records
@@ -596,7 +596,7 @@ class Experiment:
         """Import sorting results directly into the Experiment (no file I/O).
 
         Accepts the same arrays as :meth:`save_ssort` /
-        :func:`~visioniceio.core_io.write_ssort` but stores them on ``self`` without writing
+        :func:`~visioniceio.io.sorting.write_ssort` but stores them on ``self`` without writing
         a ``.ssort`` file.  This is useful when sorting results are
         produced in memory and disk persistence is not (yet) needed.
 
@@ -623,7 +623,7 @@ class Experiment:
 
         Returns:
             list[dict]: The constructed records (same structure as
-            :func:`~visioniceio.core_io.read_ssort` output).
+            :func:`~visioniceio.io.sorting.read_ssort` output).
         """
         n_records = len(labels_per_record)
 
