@@ -98,42 +98,59 @@ def _read_dltg_header(f):
     Raises:
         ValueError: If the file does not start with ``DTLG``.
     """
+    
     magic = _read_exact(f, 4)
     if magic != b'DTLG':
         raise ValueError(
             f"Expected DTLG header, got {magic!r}"
         )
+    
     _version = _read_exact(f, 4)
     ndim = struct.unpack('>I', _read_exact(f, 4))[0]
     p = struct.unpack('>I', _read_exact(f, 4))[0]
     ld = struct.unpack('>h', _read_exact(f, 2))[0]
     descriptor = _read_exact(f, ld).decode('ascii') if ld > 0 else ''
 
-    # Load offset table -- 128 entries per block; entry 127 chains to
-    # the next table when ndim > 127.
     f.seek(p)
+    
+    # If there are 128 or fewer datasets, the reading is direct in a single block
     if ndim <= 128:
-        raw = _read_exact(f, 128 * 4)
+        raw = f.read(128 * 4)
+        # Use f.read instead of _read_exact to be tolerant to files
+        if not raw: # If the file is empty
+             return ndim, np.array([], dtype=np.uint32), descriptor
         offs = np.frombuffer(raw, dtype='>u4')[:ndim].copy()
     else:
-        offs = []
-        remaining = ndim
-        while remaining > 0:
-            raw = _read_exact(f, 128 * 4)
-            block = np.frombuffer(raw, dtype='>u4')
-            if remaining <= 127:
-                offs.extend(block[:remaining].tolist())
-                remaining = 0
-            else:
-                # First 127 entries are data offsets; entry 127 is
-                # the chain pointer to the next offset table.
-                offs.extend(block[:127].tolist())
-                remaining -= 127
-                next_table = int(block[127])
-                f.seek(next_table)
-        offs = offs[:ndim]
+        # Hierarchical loading logic (Tree) for large files
+        # Same as the original version that worked:
+        offs_list = []
+        raw_initial = f.read(128 * 4)
+        if not raw_initial:
+            return ndim, np.array([], dtype=np.uint32), descriptor
+            
+        block = np.frombuffer(raw_initial, dtype='>u4')
+        # Filter only valid offsets (> 0)
+        offs_list.extend(block[block > 0].tolist())
+        
+        # While we don't have all the datasets (ndim), we expand the index blocks
+        while len(offs_list) < ndim:
+            new_offs = []
+            for off in offs_list:
+                f.seek(int(off))
+                raw_block = f.read(128 * 4)
+                if not raw_block:
+                    continue
+                blk = np.frombuffer(raw_block, dtype='>u4')
+                new_offs.extend(blk[blk > 0].tolist())
+            
+            # If we don't find new offsets, we exit to avoid infinite loop
+            if not new_offs:
+                break
+            offs_list = new_offs
+            
+        offs = np.array(offs_list[:ndim], dtype=np.uint32)
 
-    return ndim, np.array(offs, dtype=np.uint32), descriptor
+    return ndim, offs, descriptor
 
 
 # ---------------------------------------------------------------------------

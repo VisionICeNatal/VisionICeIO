@@ -1,8 +1,12 @@
 """VisionICeIO -- I/O for the Vision Lab (Natal) LabView data."""
 
-from importlib.metadata import version as _pkg_version
+from importlib.metadata import version as _pkg_version, PackageNotFoundError
 
-__version__ = _pkg_version("visioniceio")
+try:
+    __version__ = _pkg_version("visioniceio")
+except PackageNotFoundError:
+    # Default version if the package is not installed in the environment
+    __version__ = "0.0.0-dev"
 
 from .experiment import Experiment
 from .io import (
