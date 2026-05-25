@@ -76,7 +76,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   message on truncated records.
 - `read_data()` and `_read_dltg_header()` now raise a clear
   `ValueError` when `ndim` exceeds the two-level addressing capacity
-  of 16,384.
+  of 16,384.  The message names the file (when the handle was opened
+  from a path) and hints that the cause is likely a newer DLTG variant
+  (e.g. third-level chaining or a different table format), so the next
+  step is to extend the reader rather than chase a data-corruption red
+  herring.  The exact boundary value `ndim == 16,384` is accepted; only
+  values strictly greater raise.  All three behaviours are pinned by
+  tests in `TestDLTGTwoLevelMode`.
 - `read_ssort()` no longer crashes on empty channel-trial records
   (8-byte `[0, 0]` sentinels) that are common in real Variant B files
   — the old code raised `IndexError` on the first such record.
