@@ -319,21 +319,71 @@ class TestDLTGTwoLevelMode:
         for i in range(300):
             np.testing.assert_array_equal(data[i], [i] * (1 + i % 5))
 
-    def test_ndim_overflow_raises(self):
-        """ndim > 128*128=16384 must raise a clear ValueError."""
-        import io
-        # Build a header that claims ndim=20000 — we don't need real records.
+    @staticmethod
+    def _overflow_header(ndim: int) -> bytes:
+        """Build a DLTG header that declares the given over-cap ``ndim``."""
         buf = bytearray()
         buf += b"DTLG"
         buf += b"\x00\x00\x00\x01"
-        buf += struct.pack(">I", 20_000)   # ndim
+        buf += struct.pack(">I", ndim)
         buf += struct.pack(">I", 18)        # p (table right after header)
         buf += struct.pack(">h", 0)         # ld
-        # 128 × 4 zero bytes for the main table
-        buf += b"\x00" * (128 * 4)
+        buf += b"\x00" * (128 * 4)          # main table (zeros)
+        return bytes(buf)
+
+    def test_ndim_overflow_raises(self):
+        """ndim > 128*128=16384 must raise a clear ValueError."""
+        import io
 
         with pytest.raises(ValueError, match="exceeds the two-level"):
-            _read_dltg_header(io.BytesIO(bytes(buf)))
+            _read_dltg_header(io.BytesIO(self._overflow_header(20_000)))
+
+    def test_ndim_overflow_message_includes_filename(self):
+        """When reading from a real file, the error names the file."""
+        f = tempfile.NamedTemporaryFile(suffix=".dltg", delete=False)
+        f.write(self._overflow_header(20_000))
+        f.close()
+
+        with pytest.raises(ValueError, match=r"DLTG file '.*\.dltg' declares"):
+            with open(f.name, "rb") as fh:
+                _read_dltg_header(fh)
+
+    def test_ndim_overflow_message_suggests_newer_variant(self):
+        """The error hints at the likely cause so future-you knows the next step."""
+        import io
+
+        with pytest.raises(ValueError, match="newer DLTG variant"):
+            _read_dltg_header(io.BytesIO(self._overflow_header(20_000)))
+
+    def test_ndim_boundary_at_cap_accepted(self):
+        """ndim == 16384 (exactly 128 × 128) must be accepted, not rejected.
+
+        Building 16 384 real records via ``_build_dltg`` would be slow;
+        we check the header path alone by writing a header with 128
+        sub-tables of zero offsets.  We don't read the records here —
+        only the offset-table assembly.
+        """
+        ndim = 16_384
+        n_chunks = 128
+        header_size = 18
+        main_tbl_start = header_size
+        sub_tbl_start = main_tbl_start + 128 * 4
+
+        buf = bytearray()
+        buf += b"DTLG"
+        buf += b"\x00\x00\x00\x01"
+        buf += struct.pack(">I", ndim)
+        buf += struct.pack(">I", main_tbl_start)
+        buf += struct.pack(">h", 0)
+        for ci in range(128):
+            buf += struct.pack(">I", sub_tbl_start + ci * 128 * 4)
+        buf += b"\x00" * (n_chunks * 128 * 4)  # zero sub-tables
+
+        import io
+
+        result_ndim, offsets, _ = _read_dltg_header(io.BytesIO(bytes(buf)))
+        assert result_ndim == 16_384
+        assert len(offsets) == 16_384
 
 
 class TestReadDataValidation:

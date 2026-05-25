@@ -141,6 +141,10 @@ def _read_dltg_header(f):
     Raises:
         ValueError: If the file does not start with ``DTLG``, or if
             ``ndim`` exceeds the two-level mode capacity of 16384.
+            The cap message includes the file path (when *f* was opened
+            from one) and hints that a newer DLTG variant may be at
+            play, so future-you knows the next step is to extend the
+            reader rather than chase a data-corruption red herring.
         EOFError: If the file is truncated before the offset table or
             any sub-table can be fully read.
     """
@@ -165,10 +169,17 @@ def _read_dltg_header(f):
 
     # Two-level mode: each main-table entry points to a sub-table.
     if ndim > _DLTG_MAX_NDIM:
+        # Include the filename when the handle was opened from a path
+        # (BytesIO and other in-memory handles have no usable .name).
+        name = getattr(f, 'name', None)
+        file_clause = f" {name!r}" if isinstance(name, str) else ""
         raise ValueError(
-            f"DLTG file declares ndim={ndim}, which exceeds the "
-            f"two-level addressing capacity of "
-            f"{_DLTG_BLOCK_LEN}*{_DLTG_BLOCK_LEN}={_DLTG_MAX_NDIM}"
+            f"DLTG file{file_clause} declares ndim={ndim}, which exceeds "
+            f"the two-level addressing capacity of "
+            f"{_DLTG_BLOCK_LEN}*{_DLTG_BLOCK_LEN}={_DLTG_MAX_NDIM}.  "
+            f"This may indicate a newer DLTG variant (e.g. third-level "
+            f"chaining or a different table format); please report this "
+            f"file so the reader can be extended."
         )
     n_chunks = (ndim + _DLTG_BLOCK_LEN - 1) // _DLTG_BLOCK_LEN
     offsets = np.empty(ndim, dtype=np.uint32)
