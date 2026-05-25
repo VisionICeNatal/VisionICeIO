@@ -8,6 +8,7 @@ between type modules.
 
 from __future__ import annotations
 
+import os
 import struct
 from pathlib import Path
 
@@ -235,6 +236,42 @@ def read_data(filename, dtype, nd):
             data.append(arr)
 
     return data
+
+
+def _read_u4_count_prefixed_as_i4(
+    filepath: str | Path, *, label: str
+) -> np.ndarray:
+    """Read a ``[uint32_BE count][count × uint32_BE]`` file as int32.
+
+    This is the on-disk format shared by new-format ``.stim`` and
+    ``.behave`` files: a single 4-byte big-endian length prefix followed
+    by that many big-endian uint32 values.  The returned array is cast
+    to ``int32`` because all known consumers (xarray coords, sentinel
+    comparisons against negative values) expect signed integers.
+
+    Args:
+        filepath: Path to the file.
+        label: Human-readable file kind used in error messages
+            (e.g. ``"Stim file"``, ``"Behave file"``).
+
+    Returns:
+        1-D ``np.int32`` array of length ``count``.
+
+    Raises:
+        EOFError: If the declared count would extend past EOF.
+    """
+    fsize = os.path.getsize(filepath)
+    with open(filepath, 'rb') as f:
+        count = struct.unpack('>I', _read_exact(f, 4))[0]
+        nbytes = count * 4
+        remaining = fsize - f.tell()
+        if nbytes > remaining:
+            raise EOFError(
+                f"{label} claims {count} entries ({nbytes} bytes) "
+                f"but only {remaining} bytes remain"
+            )
+        raw = _read_exact(f, nbytes)
+    return np.frombuffer(raw, dtype='>u4').astype(np.int32)
 
 
 def _read_dltg_string_datasets(filepath: str | Path) -> list[str]:

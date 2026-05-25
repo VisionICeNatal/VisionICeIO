@@ -16,6 +16,7 @@ from ._helpers import (
     _parse_metadata_value,
     _read_dltg_header,
     _read_exact,
+    _read_u4_count_prefixed_as_i4,
 )
 
 # ---------------------------------------------------------------------------
@@ -126,14 +127,4 @@ def read_behave_new(filepath: str | Path) -> np.ndarray:
     Returns:
         1-D int32 array of per-trial behaviour codes.
     """
-    fsize = os.path.getsize(filepath)
-    with open(filepath, 'rb') as f:
-        n_trials = struct.unpack('>I', _read_exact(f, 4))[0]
-        nbytes = n_trials * 4
-        if nbytes > fsize - f.tell():
-            raise EOFError(
-                f"Behave file claims {n_trials} trials ({nbytes} bytes) "
-                f"but only {fsize - 4} payload bytes available"
-            )
-        raw = _read_exact(f, nbytes)
-    return np.frombuffer(raw, dtype='>u4').astype(np.int32)
+    return _read_u4_count_prefixed_as_i4(filepath, label="Behave file")

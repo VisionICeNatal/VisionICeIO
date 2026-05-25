@@ -118,7 +118,14 @@ class Experiment:
                 ``'analog'``.
 
         Returns:
-            The raw data as returned by the appropriate reader.
+            * For ``'waveform'``: a ``(records, wf_pts)`` tuple in both
+              the new (``.swave``) and old (``.swa``) branches.  In the
+              old-format branch ``wf_pts`` is derived from
+              ``records[0].shape[1]`` (or ``0`` if there are no records),
+              so the caller never has to special-case the format.
+            * For all other data types: the raw return value of the
+              underlying reader (typically a ``list[np.ndarray]`` or a
+              single ``np.ndarray``).
         """
         new_ext, new_reader, old_ext, old_dtype, old_ndim = (
             self._READERS[data_type]
@@ -129,7 +136,14 @@ class Experiment:
         if os.path.exists(new_path):
             return new_reader(new_path)
         if os.path.exists(old_path):
-            return read_data(old_path, old_dtype, old_ndim)
+            records = read_data(old_path, old_dtype, old_ndim)
+            if data_type == 'waveform':
+                # .swa records are 2-D (n_spikes, wf_pts); derive wf_pts
+                # from the first record so the old-format branch matches
+                # the (data, wf_pts) shape returned by read_swave_new.
+                wf_pts = int(records[0].shape[1]) if records else 0
+                return records, wf_pts
+            return records
         raise FileNotFoundError(
             f"Neither {new_path} nor {old_path} found."
         )
@@ -360,15 +374,11 @@ class Experiment:
         )
 
         # --- Waveforms ---
-        wave_result = self._read_raw('waveform')
-        if isinstance(wave_result, tuple):
-            # New format: (data_list, wf_pts)
-            wave_data, wf_pts = wave_result
-            if wf_pts:
-                self.snippet_points = wf_pts
-        else:
-            # Old format: list of 2-D arrays
-            wave_data = wave_result
+        # _read_raw('waveform') always returns (records, wf_pts) — the
+        # old-format branch derives wf_pts from records[0].shape[1].
+        wave_data, wf_pts = self._read_raw('waveform')
+        if wf_pts:
+            self.snippet_points = wf_pts
 
         d_wav = self._pad_waveforms(wave_data, self.max_spikes)
         d_wav = self._to_electrode_major(

@@ -24,6 +24,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `peak_to_peak_per_record`, `width_per_record` parameters so that
   Variant A / Variant B roundtrips preserve every column the sorter
   produces.  Pass `n_fields=16` to write Variant B.
+- Cross-format equivalence test for `.swa` (old DLTG) vs. `.swave`
+  (new headerless) waveform readers in
+  `tests/test_io_readers.py::TestSwaSwaveEquivalence`.  Empirically
+  verified on the lab's only paired dataset, `c5607a07_n`: both readers
+  return byte-identical NumPy arrays across 7,680 records / 1.47 M
+  spikes (≈ 55.8 M int16 samples).  The synthetic regression test
+  exercises the same property in CI without requiring lab fixtures.
+
+### Changed
+
+- `read_stim_new()` and `read_behave_new()` now share a single
+  implementation, `_read_u4_count_prefixed_as_i4()`, in
+  `visioniceio.io._helpers`.  The two readers were byte-identical
+  apart from one word in the error message; deduping removes the
+  "fix one and forget the other" hazard.  Side benefit: the old
+  ``fsize - 4`` remaining-bytes computation (which silently assumed
+  the file pointer was at byte 4) is replaced with the more robust
+  ``fsize - f.tell()`` pattern already used by the other new-format
+  readers.
+- `Experiment._read_raw('waveform')` now always returns
+  ``(records, wf_pts)`` regardless of file format — the old-format
+  (``.swa``) branch derives ``wf_pts`` from ``records[0].shape[1]``.
+  Callers no longer need to ``isinstance(..., tuple)``-dispatch on the
+  return value, and ``snippet_points`` now reflects the actual data
+  shape on disk (not just the metadata field) even for old-format
+  experiments.
 
 ### Fixed
 
