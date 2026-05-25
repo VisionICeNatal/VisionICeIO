@@ -85,15 +85,35 @@ def _read_lv_string(data: bytes, pos: int) -> tuple[str, int]:
 # DLTG container parsing
 # ---------------------------------------------------------------------------
 
+# DLTG offset tables are always blocks of exactly this many u32 BE entries.
+_DLTG_BLOCK_LEN = 128
+
 # Maximum number of records a single DLTG file can index in two-level mode:
 # 128 main-table entries × 128 sub-table entries.
-_DLTG_MAX_NDIM = 128 * 128
+_DLTG_MAX_NDIM = _DLTG_BLOCK_LEN * _DLTG_BLOCK_LEN
+
+
+def _read_dltg_offset_block(f, byte_offset: int) -> np.ndarray:
+    """Read a single 128-entry u32 BE offset block at *byte_offset*.
+
+    The DLTG container uses identical 128 × u32 BE blocks for both
+    its top-level offset table and its per-chunk sub-tables, so this
+    helper is shared.  Unused trailing slots in a block are
+    zero-filled by the writer.
+
+    Returns:
+        A length-128 ``np.ndarray`` of dtype ``'>u4'`` (a read-only
+        view over the underlying bytes).  Callers should slice with
+        the meaningful entry count and copy / cast as needed.
+    """
+    f.seek(byte_offset)
+    return np.frombuffer(_read_exact(f, _DLTG_BLOCK_LEN * 4), dtype='>u4')
 
 
 def _read_dltg_header(f):
-    """Read a DLTG file header and return (ndim, offsets, descriptor).
+    """Read a DLTG file header and return ``(ndim, offsets, descriptor)``.
 
-    The DLTG container uses two distinct addressing modes for the
+    The DLTG container uses two distinct addressing modes for its
     fixed-size 128-entry offset table at byte ``p``, dispatched by
     ``ndim``:
 
@@ -102,7 +122,7 @@ def _read_dltg_header(f):
     - **Two-level mode** (``ndim > 128``): entries
       ``[0..n_chunks-1]`` (where ``n_chunks = ceil(ndim / 128)``) are
       absolute byte offsets to per-chunk sub-tables.  Each sub-table
-      is itself a 128 x u32 BE block of absolute record offsets.
+      is itself another 128 × u32 BE block of absolute record offsets.
       Record ``i`` lives at ``sub_tables[i // 128][i % 128]``.  Max
       supported ``ndim`` is ``128 * 128 = 16384``.
 
@@ -134,32 +154,28 @@ def _read_dltg_header(f):
     ld = struct.unpack('>h', _read_exact(f, 2))[0]
     descriptor = _read_exact(f, ld).decode('ascii') if ld > 0 else ''
 
-    # Main offset table -- always 128 u32 BE entries at byte p
-    f.seek(p)
-    main_raw = _read_exact(f, 128 * 4)
-    main_tbl = np.frombuffer(main_raw, dtype='>u4')
+    main_tbl = _read_dltg_offset_block(f, p)
 
-    if ndim <= 128:
-        # Direct mode: main table entries ARE the record offsets
-        offsets = main_tbl[:ndim].astype(np.uint32).copy()
-    else:
-        # Two-level mode: each main entry points to a sub-table
-        if ndim > _DLTG_MAX_NDIM:
-            raise ValueError(
-                f"DLTG file declares ndim={ndim}, which exceeds the "
-                f"two-level addressing capacity of "
-                f"128*128={_DLTG_MAX_NDIM}"
-            )
-        n_chunks = (ndim + 127) // 128
-        offsets = np.empty(ndim, dtype=np.uint32)
-        written = 0
-        for ci in range(n_chunks):
-            f.seek(int(main_tbl[ci]))
-            sub_raw = _read_exact(f, 128 * 4)
-            sub = np.frombuffer(sub_raw, dtype='>u4')
-            take = min(128, ndim - written)
-            offsets[written:written + take] = sub[:take]
-            written += take
+    if ndim <= _DLTG_BLOCK_LEN:
+        # Direct mode: main table entries ARE the record offsets.
+        # astype() copies the read-only frombuffer view into a writable
+        # native-endian uint32 array.
+        return ndim, main_tbl[:ndim].astype(np.uint32), descriptor
+
+    # Two-level mode: each main-table entry points to a sub-table.
+    if ndim > _DLTG_MAX_NDIM:
+        raise ValueError(
+            f"DLTG file declares ndim={ndim}, which exceeds the "
+            f"two-level addressing capacity of "
+            f"{_DLTG_BLOCK_LEN}*{_DLTG_BLOCK_LEN}={_DLTG_MAX_NDIM}"
+        )
+    n_chunks = (ndim + _DLTG_BLOCK_LEN - 1) // _DLTG_BLOCK_LEN
+    offsets = np.empty(ndim, dtype=np.uint32)
+    for ci in range(n_chunks):
+        start = ci * _DLTG_BLOCK_LEN
+        take = min(_DLTG_BLOCK_LEN, ndim - start)
+        sub = _read_dltg_offset_block(f, int(main_tbl[ci]))
+        offsets[start:start + take] = sub[:take]
 
     return ndim, offsets, descriptor
 
