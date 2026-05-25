@@ -95,8 +95,16 @@ ds = load_from_zarr("/path/to/data/c5607a07.zarr")
 
 ### Spike sorting results
 
+`.ssort` files exist in two variants in the lab's recordings (10-column
+"header + spike rows" and 16-column "no-header" layouts).
+`Experiment.load_ssort()` auto-detects the variant; `save_ssort()`
+selects it via the ``n_fields`` argument (10 or 16).  See the
+[data format spec](https://VisionICeNatal.github.io/VisionICeIO/data_format.html#ssort-spike-sorting-results)
+for the column tables.
+
 ```python
-# Load from a .ssort file (stores on exp.data['cluster_labels'])
+# Load from a .ssort file (variant auto-detected;
+# stores on exp.data['cluster_labels'])
 records = exp.load_ssort()
 
 # -- or -- import directly from memory (no file needed)
@@ -109,6 +117,7 @@ records = exp.import_sorting_results(
 filepath = exp.save_ssort(
     labels_per_record=labels,
     spike_indices_per_record=spike_idx,
+    # n_fields=16 to write the no-header variant
 )
 
 # Cluster labels are now part of the dataset

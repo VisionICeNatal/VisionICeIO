@@ -40,7 +40,8 @@ Spike rows (entries ``1..n_spikes``):
     3     amp_min
     4     peak_to_peak  (= col 2 - col 3)
     5     width
-    6..   extra features (slope, PCA components, ...)
+    6     extra scalar feature (slope or similar)
+    7-9   PCA1, PCA2, PCA3
     ===== =========================
 
 Variant B -- ``n_fields == 16``, no header, redundant per-row metadata
