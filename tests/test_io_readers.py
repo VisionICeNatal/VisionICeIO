@@ -12,6 +12,7 @@ import pytest
 from visioniceio.io._helpers import read_data
 from visioniceio.io.analog import read_analog_new
 from visioniceio.io.behaviour import read_behave_new
+from visioniceio.io.metadata import read_info_new, read_metadata_ifo
 from visioniceio.io.sorting import read_ssort, write_ssort
 from visioniceio.io.spike import read_spike_new
 from visioniceio.io.stim import read_stim_new
@@ -682,3 +683,165 @@ class TestLoadFromZarrVersionGuard:
         store = self._make_v3_marker_store(tmp_path)
         with pytest.raises(ValueError, match=r"v3 format.*installed zarr is v2"):
             load_from_zarr(str(store))
+
+
+# ---------------------------------------------------------------------------
+# read_swave_new — constant wf_pts across records
+# ---------------------------------------------------------------------------
+
+
+class TestSwaveMixedPtsRejected:
+    """``read_swave_new`` must reject files whose records disagree on the
+    snippet length (``wf_pts``), since downstream consumers
+    (``Experiment._pad_waveforms``) assume a single global value."""
+
+    def test_two_records_with_different_pts_raise(self):
+        # Record 0: 1 spike x 4 pts ; record 1: 1 spike x 5 pts
+        buf = b""
+        # Record 0
+        buf += struct.pack(">II", 1, 4)
+        buf += np.array([[1, 2, 3, 4]], dtype=">i2").tobytes()
+        # Record 1 (different pts!)
+        buf += struct.pack(">II", 1, 5)
+        buf += np.array([[1, 2, 3, 4, 5]], dtype=">i2").tobytes()
+
+        path = _tmpfile(buf, ".swave")
+        with pytest.raises(ValueError, match=r"inconsistent snippet length"):
+            read_swave_new(str(path))
+
+    def test_uniform_pts_still_works(self):
+        """The sanity check must not break the common case (every record
+        has the same pts)."""
+        buf = b""
+        for n_sp in (2, 0, 1):
+            buf += struct.pack(">II", n_sp, 3)
+            if n_sp > 0:
+                buf += np.zeros((n_sp, 3), dtype=">i2").tobytes()
+        path = _tmpfile(buf, ".swave")
+        records, wf_pts = read_swave_new(str(path))
+        assert wf_pts == 3
+        assert [r.shape for r in records] == [(2, 3), (0, 3), (1, 3)]
+
+
+# ---------------------------------------------------------------------------
+# read_data — dim / nd guards
+# ---------------------------------------------------------------------------
+
+
+def _make_minimal_dltg(records: list[tuple[tuple[int, ...], bytes]]) -> bytes:
+    """Build a minimal DLTG container holding *records*.
+
+    Each record is ``((dim1, dim2, ...), payload_bytes)``.  Used by tests
+    that need to feed pathological inputs (e.g. negative dims) to
+    ``read_data``.
+    """
+    n = len(records)
+    # Header is 4 (DTLG) + 4 (version) + 4 (ndim) + 4 (p) + 2 (ld)
+    # + 0 (descriptor) = 18 bytes
+    header_size = 18
+    # Offset table starts immediately after header
+    offset_table_start = header_size
+    # Each record needs 4*len(dims) for the dim header + len(payload) bytes
+    record_offsets: list[int] = []
+    cursor = offset_table_start + 128 * 4  # offset table is always 128 u32
+    for dims, payload in records:
+        record_offsets.append(cursor)
+        cursor += 4 * len(dims) + len(payload)
+
+    buf = bytearray()
+    buf += b"DTLG"
+    buf += b"\x00\x00\x00\x01"  # version
+    buf += struct.pack(">I", n)  # ndim
+    buf += struct.pack(">I", offset_table_start)  # p
+    buf += struct.pack(">h", 0)  # ld (descriptor length)
+
+    # Offset table: 128 u32 BE, with the first `n` filled
+    table = np.zeros(128, dtype=">u4")
+    for i, off in enumerate(record_offsets):
+        table[i] = off
+    buf += table.tobytes()
+
+    # Records
+    for dims, payload in records:
+        for d in dims:
+            buf += struct.pack(">i", d)
+        buf += payload
+    return bytes(buf)
+
+
+class TestReadDataDimGuards:
+    """``read_data`` must reject malformed dim headers with clean
+    ``ValueError`` messages instead of producing phantom output or
+    surfacing cryptic NumPy errors."""
+
+    def test_nd_zero_rejected(self):
+        # The file itself is well-formed; nd=0 is invalid at the API level.
+        buf = _make_minimal_dltg([((1,), b"\x00" * 2)])
+        path = _tmpfile(buf, ".bin")
+        with pytest.raises(ValueError, match=r"nd must be >= 1"):
+            read_data(str(path), "int16", 0)
+
+    def test_negative_dim_rejected(self):
+        # Record declares dim = -1 (signed int32 unpacking).
+        payload = b""  # any payload, we won't get that far
+        buf = _make_minimal_dltg([((-1,), payload)])
+        path = _tmpfile(buf, ".bin")
+        with pytest.raises(ValueError, match=r"negative dimensions"):
+            read_data(str(path), "int16", 1)
+
+    def test_zero_dim_accepted_for_empty_records(self):
+        # Zero is a legitimate dim — old-format .swa empty channel-trials
+        # are stored as shape (0, n_pts).  The guard must NOT reject this.
+        buf = _make_minimal_dltg([((0, 5), b"")])
+        path = _tmpfile(buf, ".bin")
+        records = read_data(str(path), "int16", 2)
+        assert len(records) == 1
+        assert records[0].shape == (0, 5)
+
+
+# ---------------------------------------------------------------------------
+# read_metadata_ifo — truncated DLTG falls back to text reader
+# ---------------------------------------------------------------------------
+
+
+class TestReadMetadataIfoTruncated:
+    """``read_metadata_ifo`` docstring promises a text-mode fallback when
+    the DLTG container cannot be parsed.  A truncated DLTG header raises
+    ``EOFError`` from ``_read_dltg_header``; the previous catch tuple was
+    missing ``EOFError`` and let the failure escape."""
+
+    def test_truncated_dltg_falls_back_to_text(self, tmp_path):
+        # DTLG magic + version + truncated ndim (only 2 of 4 bytes)
+        truncated = b"DTLG\x00\x00\x00\x01\x00\x00"
+        path = tmp_path / "truncated.ifo"
+        path.write_bytes(truncated)
+        # Must NOT raise EOFError — must fall through to read_metadata,
+        # which returns {} for binary-looking content.
+        result = read_metadata_ifo(str(path))
+        assert result == {}
+
+
+# ---------------------------------------------------------------------------
+# read_info_new — bogus record2_size raises clear ValueError
+# ---------------------------------------------------------------------------
+
+
+class TestReadInfoNewBogusRecord2Size:
+    """``read_info_new`` must validate the declared ``record2_size``
+    against the available file bytes instead of trusting it blindly and
+    letting downstream readers surface a less-clear error."""
+
+    def test_record2_size_past_eof_raises(self, tmp_path):
+        # File: PTH0 record1 (size=0) + PTH0 record2 with size=0xFFFFFFFF
+        # but only a few bytes of actual data afterwards.
+        buf = bytearray()
+        buf += b"PTH0"
+        buf += struct.pack(">I", 0)  # record 1 size
+        buf += b"PTH0"
+        buf += struct.pack(">I", 0xFFFFFFFF)  # record 2 size — implausibly large
+        buf += b"\x00" * 16  # only a handful of bytes after
+
+        path = tmp_path / "bogus.info"
+        path.write_bytes(bytes(buf))
+        with pytest.raises(ValueError, match=r"PTH0 record declares size"):
+            read_info_new(str(path))

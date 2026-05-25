@@ -214,6 +214,10 @@ def read_data(filename, dtype, nd):
     """
     if dtype not in dtype_map:
         raise ValueError(f"Unsupported datatype {dtype}")
+    if nd < 1:
+        # Defensive: a 0-d record would silently round-trip through struct
+        # + np.prod (empty tuple -> 1.0) and read a single phantom element.
+        raise ValueError(f"read_data: nd must be >= 1, got {nd}")
     np_dtype, datasize = dtype_map[dtype]
 
     with open(filename, "rb") as f:
@@ -226,6 +230,16 @@ def read_data(filename, dtype, nd):
             f.seek(int(off))
             # read dimension sizes (C-order)
             dims = struct.unpack(">" + "i" * nd, _read_exact(f, 4 * nd))
+            if any(d < 0 for d in dims):
+                # A negative dim would either round-trip to a small positive
+                # count (multi-axis sign cancellation) or surface NumPy's
+                # cryptic "only one unknown dimension" error from reshape().
+                # Zero dims are legitimate -- legacy .swa empty channel-trials
+                # are stored as shape (0, n_pts).
+                raise ValueError(
+                    f"Dataset at offset {int(off)} has negative dimensions "
+                    f"{dims} (file truncated or corrupt)"
+                )
             count = int(np.prod(dims))
             nbytes = count * datasize
             remaining = fsize - f.tell()

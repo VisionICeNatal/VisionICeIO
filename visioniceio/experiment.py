@@ -81,6 +81,7 @@ class Experiment:
         self.data = None
         self.metadata = None
         self.sorting_results = None  # list[dict] | None, populated by load_ssort()
+        self.behaviour = None  # populated by _attach_bhv() when load_bhv=True
 
     # ------------------------------------------------------------------
     # File resolution helpers

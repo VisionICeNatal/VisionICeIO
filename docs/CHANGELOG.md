@@ -17,6 +17,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (`TestLoadFromZarrVersionGuard`).
 - Regression test for `Experiment.import_sorting_results` with a
   per-record array containing a `None` entry (`test_import_with_partial_none_per_record_arrays`).
+- Regression tests for the second-round hardening fixes
+  (`TestSwaveMixedPtsRejected`, `TestReadDataDimGuards`,
+  `TestReadMetadataIfoTruncated`, `TestReadInfoNewBogusRecord2Size`,
+  `TestExperimentInit`).
 - `.ssort` reader now auto-detects two binary variants observed in
   real lab files:
   - Variant A (`n_fields = 10`) — header row followed by `n_spikes`
@@ -47,6 +51,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   header-only convention and v16's `[0, 0]` sentinel separately, with
   a note that the reader still accepts the legacy `[0, 0]` form for
   v10 back-compat.
+- `docs/data_format.md` `features` row in the returned-record table no
+  longer hard-codes `cols 6–9 (4 feats)` / `cols 10–15 (6 feats)`.
+  The text now states that `features` covers the trailing columns
+  after the named fields and qualifies the column ranges with the
+  default `n_fields=10` for Variant A — `read_ssort()` actually
+  returns `rows[:, 6:]` (or `rows[:, 10:]`) open-ended, and the old
+  doc would have silently lied for a non-default `n_fields`.
 - Demo-notebook dependencies (`matplotlib`, `ipywidgets`) moved from
   the orphaned `requirements.txt` into a new ``notebook`` extras in
   ``pyproject.toml``; ``requirements.txt`` removed.  Install with
@@ -146,6 +157,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   count matches `ntrials * nelectrodes` and that no record claims more
   spikes than `max_spikes`, with clear error messages instead of
   cryptic NumPy failures.
+- `read_metadata_ifo()` now also catches `EOFError` from the DLTG
+  parse attempt before falling back to the plain-text reader.  The
+  docstring promised a text fallback "if the DLTG container cannot be
+  parsed", but a truncated `.ifo` raised `EOFError` from
+  `_read_dltg_header` and bypassed it.
+- `read_swave_new()` now raises a clear `ValueError` when waveform
+  records disagree on the snippet length (`pts`) instead of returning
+  a stale first-record `wf_pts` and letting
+  `Experiment._pad_waveforms` fail later with NumPy's confusing
+  "inhomogeneous shape" error.
+- `read_info_new()` now validates the declared second-PTH0
+  `record2_size` against the bytes remaining in the file, raising a
+  clear `ValueError` if the size would push the parser past EOF.
+  A corrupt or non-PTH0 file would previously advance the read
+  cursor arbitrarily and surface a less-clear EOFError from a
+  downstream LV-string read.
+- `read_data()` now rejects `nd < 1` (API-level guard) and rejects
+  per-record dim headers containing **negative** values (data-level
+  guard).  A `dim == 0` is still accepted — legacy `.swa` empty
+  channel-trials are legitimately stored as shape `(0, n_pts)`.
+- `Experiment.__init__` now initialises `self.behaviour = None`
+  alongside `self.sorting_results`.  The attribute was only ever set
+  inside `_attach_bhv()`, so `hasattr(exp, "behaviour")` was `False`
+  on the default `load_bhv=False` path.
 
 ## [0.1.0] - 2026-03-08
 

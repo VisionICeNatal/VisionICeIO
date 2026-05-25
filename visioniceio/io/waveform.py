@@ -42,6 +42,16 @@ def read_swave_new(filepath: str | Path) -> tuple[list[np.ndarray], int]:
             count, pts = struct.unpack(">II", raw_hdr)
             if not wf_pts:
                 wf_pts = pts
+            elif pts != wf_pts:
+                # Downstream callers (Experiment._pad_waveforms) assume a
+                # single global wf_pts across all records.  Surface the
+                # mismatch here with a clear message instead of letting
+                # np.array(...) fail later with an inhomogeneous-shape error.
+                raise ValueError(
+                    f"Waveform file has inconsistent snippet length: "
+                    f"first record had wf_pts={wf_pts}, but a later record "
+                    f"declares pts={pts}"
+                )
             nbytes = count * pts * 2
             if nbytes > fsize - f.tell():
                 raise EOFError(

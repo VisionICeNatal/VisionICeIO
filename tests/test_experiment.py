@@ -235,3 +235,20 @@ class TestImportSortingResults:
         )
         np.testing.assert_array_almost_equal(result[0]["amp_max"], [200.0, 210.0])
         np.testing.assert_array_equal(result[1]["amp_max"], [0.0])
+
+
+class TestExperimentInit:
+    """``Experiment.__init__`` must declare every attribute that other
+    methods rely on existing so ``hasattr`` / reflective callers don't
+    see a half-built object on the common path."""
+
+    def test_behaviour_initialized_to_none(self):
+        """``self.behaviour`` is only set inside ``_attach_bhv``, which
+        runs when ``load_bhv=True``.  On the default path the attribute
+        must still exist (initialised to ``None``)."""
+        exp = Experiment()
+        assert exp.behaviour is None
+
+    def test_sorting_results_initialized_to_none(self):
+        exp = Experiment()
+        assert exp.sorting_results is None

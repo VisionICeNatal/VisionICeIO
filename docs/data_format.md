@@ -267,7 +267,7 @@ the same keys regardless of variant:
 | `amp_min`         | ndarray float32 | shape `(n_spikes,)` |
 | `peak_to_peak`    | ndarray float32 | shape `(n_spikes,)` |
 | `width`           | ndarray float32 | shape `(n_spikes,)` |
-| `features`        | ndarray float32 | shape `(n_spikes, n_feat)`; v10: cols 6–9 (4 feats), v16: cols 10–15 (6 feats) |
+| `features`        | ndarray float32 | shape `(n_spikes, n_feat)`; trailing columns after the named fields — v10: `cols 6..n_fields-1` (4 feats at default `n_fields=10`); v16: `cols 10..15` (6 feats; `n_fields` is always 16 for v16) |
 
 ### Reading and writing
 

@@ -87,7 +87,9 @@ def read_metadata_ifo(filepath: str | Path) -> dict:
             _ndim, offsets, _desc = _read_dltg_header(f)
             f.seek(int(offsets[0]))
             data = f.read()
-    except (ValueError, struct.error, UnicodeDecodeError):
+    except (ValueError, struct.error, UnicodeDecodeError, EOFError):
+        # EOFError covers truncated DLTG headers (e.g. file ended mid
+        # offset-table); the docstring promises a text fallback in this case.
         return read_metadata(filepath)
 
     # --- Parse the binary dataset ---
@@ -232,7 +234,17 @@ def read_info_new(filepath: str | Path) -> dict:
             f"need 8 bytes for header but only {len(data) - second_pth0} remain"
         )
     record2_size = struct.unpack_from(">I", data, second_pth0 + 4)[0]
-    # Record 2 layout: magic(4) + size_field(4) + data(record2_size)
+    # Record 2 layout: magic(4) + size_field(4) + data(record2_size).
+    # Bound-check before trusting the declared size: a corrupt or non-PTH0
+    # file could otherwise advance `pos` arbitrarily far past EOF, and the
+    # downstream `_read_lv_string` would then surface a less-clear error.
+    max_record2_size = len(data) - (second_pth0 + 8)
+    if record2_size > max_record2_size:
+        raise ValueError(
+            f"Second PTH0 record declares size={record2_size} bytes but only "
+            f"{max_record2_size} bytes remain after its header (file truncated "
+            f"or corrupt)"
+        )
     pos = second_pth0 + 8 + record2_size
     # Skip 4-byte zero-padding after record 2
     pos += 4
