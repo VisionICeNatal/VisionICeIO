@@ -495,23 +495,49 @@ class Experiment:
         Shared helper used by :meth:`load_ssort`, :meth:`save_ssort`,
         and :meth:`import_sorting_results`.
 
+        Validates that the record count matches ``ntrials * nelectrodes``
+        and that no record has more spikes than ``max_spikes``.
+
         Args:
             records: List of per-channel-trial dicts as returned by
                 :func:`~visioniceio.io.sorting.read_ssort` or built by
                 :meth:`import_sorting_results`.
+
+        Raises:
+            ValueError: If the number of records does not match
+                ``ntrials * nelectrodes`` or if any record claims more
+                spikes than ``max_spikes``.
         """
-        self.sorting_results = records
+        expected = self.ntrials * self.nelectrodes
+        if len(records) != expected:
+            raise ValueError(
+                f"Sorting record count {len(records)} does not match "
+                f"ntrials * nelectrodes = {self.ntrials} * "
+                f"{self.nelectrodes} = {expected}"
+            )
 
         # Reshape cluster labels into (electrodes, trials, max_spikes)
         # Records are trial-major, channel-minor — same order as spike_times
-        labels_flat = [
-            np.pad(
-                r['labels'].astype(np.float32),
-                (0, self.max_spikes - r['n_spikes']),
-                constant_values=np.nan,
+        labels_flat = []
+        for i, r in enumerate(records):
+            n_sp = int(r['n_spikes'])
+            if n_sp > self.max_spikes:
+                raise ValueError(
+                    f"Record {i} has {n_sp} spikes but the Experiment "
+                    f"was loaded with max_spikes={self.max_spikes}. "
+                    "The sorter cannot add spikes beyond the original "
+                    "detector output."
+                )
+            labels = np.asarray(r['labels']).astype(np.float32)
+            labels_flat.append(
+                np.pad(
+                    labels,
+                    (0, self.max_spikes - n_sp),
+                    constant_values=np.nan,
+                )
             )
-            for r in records
-        ]
+
+        self.sorting_results = records
         labels_arr = np.array(labels_flat, dtype=np.float32)
         labels_arr = self._to_electrode_major(
             labels_arr, self.ntrials, self.nelectrodes, self.max_spikes
@@ -531,9 +557,10 @@ class Experiment:
     def load_ssort(self, filepath: str | None = None) -> list[dict]:
         """Load spike-sorting results from a ``.ssort`` file.
 
-        Reads the binary ``.ssort`` file and stores the parsed records on
-        ``self.sorting_results``.  Cluster labels are reshaped to match the
-        ``spike_times`` layout and added to ``self.data`` as
+        Reads the binary ``.ssort`` file (auto-detecting the format
+        variant) and stores the parsed records on
+        ``self.sorting_results``.  Cluster labels are reshaped to match
+        the ``spike_times`` layout and added to ``self.data`` as
         ``cluster_labels``.
 
         Args:
@@ -541,10 +568,18 @@ class Experiment:
                 for ``<name>.ssort`` in the experiment directory.
 
         Returns:
-            list[dict]: Per-channel-trial records with keys
-            ``channel_idx``, ``n_spikes``, ``trial_idx``,
-            ``stim_condition``, ``labels``, ``spike_indices``,
-            ``features``.
+            list[dict]: Per-channel-trial records as returned by
+            :func:`~visioniceio.io.sorting.read_ssort`.  Each dict has
+            keys ``channel_idx``, ``n_spikes``, ``trial_idx``,
+            ``stim_condition``, ``variant``, ``labels``,
+            ``spike_indices``, ``amp_max``, ``amp_min``,
+            ``peak_to_peak``, ``width``, and ``features``.
+
+        Raises:
+            FileNotFoundError: If *filepath* (or the default path) does
+                not exist.
+            ValueError: If the file's record count or per-record spike
+                counts are incompatible with the loaded experiment.
         """
         if filepath is None:
             filepath = os.path.join(self.path, self.name + '.ssort')
@@ -566,11 +601,19 @@ class Experiment:
         channel_indices: list | np.ndarray | None = None,
         trial_indices: list | np.ndarray | None = None,
         stim_conditions: list | np.ndarray | None = None,
+        amp_max_per_record: list[np.ndarray] | None = None,
+        amp_min_per_record: list[np.ndarray] | None = None,
+        peak_to_peak_per_record: list[np.ndarray] | None = None,
+        width_per_record: list[np.ndarray] | None = None,
     ) -> str:
         """Write spike-sorting results to a ``.ssort`` file.
 
         After writing, the results are also stored on the instance
         (equivalent to calling :meth:`load_ssort` on the written file).
+
+        The output file's variant is selected by *n_fields*:
+        ``n_fields == 16`` writes Variant B (no header row);
+        anything else writes Variant A (header + spike rows).
 
         Args:
             labels_per_record: List of 1-D label arrays, one per
@@ -578,26 +621,54 @@ class Experiment:
             spike_indices_per_record: List of 1-D arrays of spike-time
                 sample indices.
             features_per_record: Optional per-spike feature arrays.
+                Written into columns *after* the named amplitude/width
+                columns.
             filepath: Output path. Defaults to ``<path>/<name>.ssort``.
-            n_fields: Number of columns per spike row (default 10).
+            n_fields: Number of columns per spike row.  Default 10
+                (Variant A).  Pass 16 to write Variant B.
             channel_indices: Optional per-record channel indices.
+                Defaults to ``record_idx % nelectrodes``.
             trial_indices: Optional per-record trial indices.
-            stim_conditions: Optional per-record stimulus-condition codes.
+                Defaults to ``record_idx // nelectrodes``.
+            stim_conditions: Optional per-record stimulus-condition
+                codes.  Defaults to 0.
+            amp_max_per_record: Optional per-spike amp_max arrays.
+            amp_min_per_record: Optional per-spike amp_min arrays.
+            peak_to_peak_per_record: Optional per-spike peak-to-peak
+                arrays.
+            width_per_record: Optional per-spike spike-width arrays.
 
         Returns:
             str: The path the file was written to.
         """
         if filepath is None:
             filepath = os.path.join(self.path, self.name + '.ssort')
+
+        # Default channel / trial indices from the record's position when
+        # the experiment has been loaded (so a roundtrip preserves them).
+        n_records = len(labels_per_record)
+        if (channel_indices is None and self.nelectrodes is not None):
+            channel_indices = [
+                i % self.nelectrodes for i in range(n_records)
+            ]
+        if trial_indices is None and self.nelectrodes is not None:
+            trial_indices = [
+                i // self.nelectrodes for i in range(n_records)
+            ]
+
         write_ssort(
             filepath,
             labels_per_record,
             spike_indices_per_record,
-            features_per_record,
-            n_fields,
-            channel_indices,
-            trial_indices,
-            stim_conditions,
+            features_per_record=features_per_record,
+            n_fields=n_fields,
+            channel_indices=channel_indices,
+            trial_indices=trial_indices,
+            stim_conditions=stim_conditions,
+            amp_max_per_record=amp_max_per_record,
+            amp_min_per_record=amp_min_per_record,
+            peak_to_peak_per_record=peak_to_peak_per_record,
+            width_per_record=width_per_record,
         )
         # Re-read the written file to populate self.sorting_results
         # and self.data['cluster_labels'] (single code path via load_ssort)
@@ -609,17 +680,21 @@ class Experiment:
         labels_per_record: list[np.ndarray],
         spike_indices_per_record: list[np.ndarray],
         features_per_record: list[np.ndarray] | None = None,
-        n_fields: int = 10,
         channel_indices: list | np.ndarray | None = None,
         trial_indices: list | np.ndarray | None = None,
         stim_conditions: list | np.ndarray | None = None,
+        amp_max_per_record: list[np.ndarray] | None = None,
+        amp_min_per_record: list[np.ndarray] | None = None,
+        peak_to_peak_per_record: list[np.ndarray] | None = None,
+        width_per_record: list[np.ndarray] | None = None,
     ) -> list[dict]:
         """Import sorting results directly into the Experiment (no file I/O).
 
         Accepts the same arrays as :meth:`save_ssort` /
-        :func:`~visioniceio.io.sorting.write_ssort` but stores them on ``self`` without writing
-        a ``.ssort`` file.  This is useful when sorting results are
-        produced in memory and disk persistence is not (yet) needed.
+        :func:`~visioniceio.io.sorting.write_ssort` but stores them on
+        ``self`` without writing a ``.ssort`` file.  Useful when
+        sorting results are produced in memory and disk persistence is
+        not (yet) needed.
 
         After calling this method, ``self.sorting_results`` holds the
         record list and ``self.data['cluster_labels']`` contains the
@@ -631,16 +706,19 @@ class Experiment:
             spike_indices_per_record: List of 1-D arrays of spike-time
                 sample indices.
             features_per_record: Optional per-spike feature arrays
-                ``(n_spikes, n_feat)``.  If ``None``, an empty array is
-                stored for each record.
-            n_fields: Number of feature columns (default 10).  Only used
-                when *features_per_record* is ``None``.
+                ``(n_spikes, n_feat)``.  If ``None``, an empty
+                ``(n_spikes, 0)`` array is stored for each record.
             channel_indices: Optional per-record channel indices.
-                Defaults to cycling ``0 .. n_electrodes-1``.
+                Defaults to ``i % nelectrodes``.
             trial_indices: Optional per-record trial indices.
-                Defaults to ``floor(record_index / n_electrodes)``.
-            stim_conditions: Optional per-record stimulus-condition codes.
-                Defaults to 0.
+                Defaults to ``i // nelectrodes``.
+            stim_conditions: Optional per-record stimulus-condition
+                codes.  Defaults to 0.
+            amp_max_per_record: Optional per-spike amp_max arrays.
+                Zero-filled if absent.
+            amp_min_per_record: As above for amp_min.
+            peak_to_peak_per_record: As above for peak-to-peak.
+            width_per_record: As above for width.
 
         Returns:
             list[dict]: The constructed records (same structure as
@@ -656,26 +734,44 @@ class Experiment:
         if stim_conditions is None:
             stim_conditions = [0] * n_records
 
+        def _per_record(arr_list, n_spikes):
+            """Resolve a per-record array, returning zeros if missing."""
+            if arr_list is None:
+                return np.zeros(n_spikes, dtype=np.float32)
+            entry = arr_list[i] if arr_list[i] is not None else \
+                np.zeros(n_spikes, dtype=np.float32)
+            return np.asarray(entry, dtype=np.float32)
+
         records: list[dict] = []
         for i in range(n_records):
-            labels = np.asarray(labels_per_record[i])
-            spike_idx = np.asarray(spike_indices_per_record[i])
-            n_spikes = len(labels)
+            labels = np.asarray(labels_per_record[i], dtype=np.int32)
+            spike_idx = np.asarray(
+                spike_indices_per_record[i], dtype=np.float32
+            )
+            n_spikes = int(labels.shape[0])
 
-            if features_per_record is not None:
+            if features_per_record is not None and \
+                    features_per_record[i] is not None:
                 feat = np.asarray(features_per_record[i], dtype=np.float32)
+                if feat.ndim == 1:
+                    feat = feat.reshape(-1, 1)
             else:
-                # n_fields minus the 4 standard columns (label, index, amp, slope)
-                n_feat = max(n_fields - 4, 0)
-                feat = np.zeros((n_spikes, n_feat), dtype=np.float32)
+                feat = np.empty((n_spikes, 0), dtype=np.float32)
 
             records.append({
                 'channel_idx': int(channel_indices[i]),
                 'n_spikes': n_spikes,
                 'trial_idx': int(trial_indices[i]),
                 'stim_condition': int(stim_conditions[i]),
+                'variant': 'v10',
                 'labels': labels,
                 'spike_indices': spike_idx,
+                'amp_max': _per_record(amp_max_per_record, n_spikes),
+                'amp_min': _per_record(amp_min_per_record, n_spikes),
+                'peak_to_peak': _per_record(
+                    peak_to_peak_per_record, n_spikes
+                ),
+                'width': _per_record(width_per_record, n_spikes),
                 'features': feat,
             })
 

@@ -154,29 +154,40 @@ flowchart TD
 > After loading or importing, cluster labels are available as
 > `Experiment.data['cluster_labels']`.
 
-The `.ssort` file stores spike sorting labels and waveform features aligned
-to the unsorted spike train. Like the data files, records are
-**trial-major, channel-minor**.
+The `.ssort` file stores spike sorting labels and waveform features
+aligned to the unsorted spike train.  Records are **trial-major,
+channel-minor** (1:1 aligned with `.spike` / `.swave`).
 
-### Binary layout
+Two binary variants are observed in real recordings, distinguished by
+the per-record `n_fields` value.  `read_ssort()` auto-detects the
+variant from the first non-empty record; `write_ssort(..., n_fields=...)`
+selects the variant on write.
 
-Each record:
+### Common framing
+
+Every variant uses the same record framing:
 
 ```
 [n_entries : uint32_BE]  [n_fields : uint32_BE]
 [n_entries × n_fields × float32_BE]
 ```
 
-`n_entries = 1 (header) + n_spikes`. `n_fields` is typically 10.
+**Empty channel-trial records** (no spikes detected on that
+channel-trial) are stored as 8 bytes total — `n_entries = 0,
+n_fields = 0`, no payload — in both variants.
 
-**Header row** (first entry):
+### Variant A — `n_fields = 10` (header row + spike rows)
+
+`n_entries = 1 (header) + n_spikes`.
+
+**Header row** (entry 0):
 
 | Column | Meaning |
 |--------|---------|
-| 0      | Channel index (0-based within the trial) |
-| 1      | Actual spike count for this channel-trial |
+| 0      | Channel index |
+| 1      | Spike count for this channel-trial |
 | 2      | Trial index |
-| 3      | Stimulus condition code |
+| 3      | Stimulus condition |
 | 4–9    | Reserved (0) |
 
 **Spike rows** (entries 1 … n_spikes):
@@ -184,24 +195,70 @@ Each record:
 | Column | Meaning |
 |--------|---------|
 | 0      | Cluster label (int, stored as float32) |
-| 1      | Spike time sample index (at spike sampling rate) |
-| 2      | Amplitude |
-| 3      | Slope |
-| 4–6    | PCA components (PCA1, PCA2, PCA3) |
-| 7–9    | Reserved; zero if unused |
+| 1      | Spike sample index (at spike sampling rate) |
+| 2      | Amplitude max |
+| 3      | Amplitude min |
+| 4      | Peak-to-peak (= col 2 − col 3) |
+| 5      | Width |
+| 6      | Extra scalar feature (slope or similar) |
+| 7–9    | PCA1, PCA2, PCA3 |
+
+### Variant B — `n_fields = 16` (no header, redundant per-row metadata)
+
+`n_entries = n_spikes`.  There is **no header row** — every row is a
+spike.  Channel / trial / stimulus are stamped redundantly on every
+row (constant within a record).
+
+| Column | Meaning |
+|--------|---------|
+| 0      | Channel index (constant within record) |
+| 1      | Cluster label |
+| 2      | Trial index (constant within record) |
+| 3      | Spike sample index |
+| 4      | Stimulus condition (constant within record) |
+| 5      | Reserved (always 0) |
+| 6      | Amplitude max |
+| 7      | Amplitude min |
+| 8      | Peak-to-peak (= col 6 − col 7) |
+| 9      | Width |
+| 10     | Extra scalar feature |
+| 11–15  | PCA1..PCA5 |
+
+### Returned record structure (both variants)
+
+`read_ssort()` returns a list of dicts, one per channel-trial, with
+the same keys regardless of variant:
+
+| Key | Type | Description |
+|-----|------|-------------|
+| `channel_idx`     | int           | 0-based channel index |
+| `n_spikes`        | int           | spike count (0 for empty records) |
+| `trial_idx`       | int           | 0-based trial index |
+| `stim_condition`  | int           | stim condition code |
+| `variant`         | str           | `'v10'` or `'v16'` |
+| `labels`          | ndarray int32 | cluster labels, shape `(n_spikes,)` |
+| `spike_indices`   | ndarray float32 | sample indices, shape `(n_spikes,)` |
+| `amp_max`         | ndarray float32 | shape `(n_spikes,)` |
+| `amp_min`         | ndarray float32 | shape `(n_spikes,)` |
+| `peak_to_peak`    | ndarray float32 | shape `(n_spikes,)` |
+| `width`           | ndarray float32 | shape `(n_spikes,)` |
+| `features`        | ndarray float32 | shape `(n_spikes, n_feat)`; v10: cols 6–9 (4 feats), v16: cols 10–15 (6 feats) |
 
 ### Reading and writing
 
-- `read_ssort(filepath)` → list of dicts with keys `channel_idx`,
-  `n_spikes`, `trial_idx`, `stim_condition`, `labels`, `spike_indices`,
-  `features`.
-- `write_ssort(filepath, labels, spike_indices, features, n_fields, ...)` writes
-  the matching binary format.  Accepts optional `channel_indices`,
-  `trial_indices`, and `stim_conditions` arrays.
-- `Experiment.load_ssort()` / `Experiment.save_ssort()` provide convenience
-  wrappers that resolve paths relative to the experiment directory.
+- `read_ssort(filepath)` → auto-detects variant and returns a list of
+  the dicts described above.
+- `write_ssort(filepath, labels, spike_indices, ..., n_fields=10)` →
+  writes Variant A by default.  Pass `n_fields=16` for Variant B.
+  Accepts optional `amp_max_per_record`, `amp_min_per_record`,
+  `peak_to_peak_per_record`, `width_per_record`, `features_per_record`,
+  `channel_indices`, `trial_indices`, `stim_conditions`.
+- `Experiment.load_ssort()` / `Experiment.save_ssort()` provide
+  convenience wrappers that resolve paths relative to the experiment
+  directory and validate the record count / max-spikes invariants.
 - `Experiment.import_sorting_results()` accepts the same arrays as
-  `save_ssort()` but stores them on the instance without writing to disk.
+  `save_ssort()` but stores them on the instance without writing to
+  disk.
 
 ## XArray Structure
 

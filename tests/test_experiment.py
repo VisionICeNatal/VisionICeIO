@@ -133,3 +133,82 @@ class TestLoadSpikeIndices:
             exp.name = "nonexistent"
             with pytest.raises(FileNotFoundError):
                 exp.load_spike_indices()
+
+
+def _make_minimal_exp(ntrials=2, nelectrodes=2, max_spikes=3):
+    """Build a minimal Experiment with a stub xr.Dataset for sorting tests."""
+    import xarray as xr
+
+    exp = Experiment()
+    exp.ntrials = ntrials
+    exp.nelectrodes = nelectrodes
+    exp.max_spikes = max_spikes
+    # Build a minimal Dataset with the required coords
+    coords = {
+        "electrodes": np.arange(nelectrodes),
+        "trials": np.arange(ntrials),
+        "spikes_idx": np.arange(max_spikes),
+    }
+    exp.data = xr.Dataset(coords=coords)
+    return exp
+
+
+class TestAttachSortingValidation:
+    """``Experiment._attach_sorting`` must validate inputs with clear errors."""
+
+    def test_rejects_wrong_record_count(self):
+        exp = _make_minimal_exp(ntrials=2, nelectrodes=2, max_spikes=3)
+        records = [
+            {"n_spikes": 0, "labels": np.empty(0, dtype=np.int32)}
+        ] * 3  # 3 instead of 4
+        with pytest.raises(ValueError, match="record count"):
+            exp._attach_sorting(records)
+
+    def test_rejects_n_spikes_exceeding_max_spikes(self):
+        exp = _make_minimal_exp(ntrials=1, nelectrodes=1, max_spikes=2)
+        records = [
+            {
+                "n_spikes": 5,  # > max_spikes=2
+                "labels": np.array([1, 1, 2, 2, 3], dtype=np.int32),
+            }
+        ]
+        with pytest.raises(ValueError, match="max_spikes"):
+            exp._attach_sorting(records)
+
+
+class TestImportSortingResults:
+    """``Experiment.import_sorting_results`` works without n_fields arg."""
+
+    def test_basic_import(self):
+        exp = _make_minimal_exp(ntrials=2, nelectrodes=2, max_spikes=3)
+        labels = [
+            np.array([1, 2], dtype=np.int32),
+            np.array([], dtype=np.int32),
+            np.array([3, 3, 4], dtype=np.int32),
+            np.array([5], dtype=np.int32),
+        ]
+        indices = [
+            np.array([10.0, 20.0], dtype=np.float32),
+            np.array([], dtype=np.float32),
+            np.array([30.0, 40.0, 50.0], dtype=np.float32),
+            np.array([60.0], dtype=np.float32),
+        ]
+        result = exp.import_sorting_results(labels, indices)
+        assert len(result) == 4
+        # cluster_labels attached to dataset with right shape
+        assert "cluster_labels" in exp.data
+        assert exp.data["cluster_labels"].shape == (2, 2, 3)  # ch, trial, spikes
+
+    def test_import_with_amp_arrays(self):
+        exp = _make_minimal_exp(ntrials=1, nelectrodes=1, max_spikes=2)
+        labels = [np.array([1, 2], dtype=np.int32)]
+        indices = [np.array([10.0, 20.0], dtype=np.float32)]
+        amp_max = [np.array([200.0, 210.0], dtype=np.float32)]
+        result = exp.import_sorting_results(
+            labels, indices, amp_max_per_record=amp_max,
+        )
+        np.testing.assert_array_almost_equal(
+            result[0]["amp_max"], [200.0, 210.0]
+        )
+        # other named columns default to zeros
+        np.testing.assert_array_equal(result[0]["amp_min"], [0.0, 0.0])

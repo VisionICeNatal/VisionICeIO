@@ -10,6 +10,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - `Experiment` class early draft
+- `.ssort` reader now auto-detects two binary variants observed in
+  real lab files:
+  - Variant A (`n_fields = 10`) — header row followed by `n_spikes`
+    spike rows.
+  - Variant B (`n_fields = 16`) — no header row; every row is a spike
+    with channel / trial / stim stamped redundantly per row.
+- `read_ssort()` now returns structured per-spike arrays
+  (`labels`, `spike_indices`, `amp_max`, `amp_min`, `peak_to_peak`,
+  `width`, `features`) instead of an opaque feature blob.  Each record
+  also carries a `variant` key (`'v10'` or `'v16'`).
+- `write_ssort()` and `Experiment.save_ssort()` gained optional
+  `amp_max_per_record`, `amp_min_per_record`,
+  `peak_to_peak_per_record`, `width_per_record` parameters so that
+  Variant A / Variant B roundtrips preserve every column the sorter
+  produces.  Pass `n_fields=16` to write Variant B.
+
+### Fixed
+
+- `read_ssort()` no longer crashes on empty channel-trial records
+  (8-byte `[0, 0]` sentinels) that are common in real Variant B files
+  — the old code raised `IndexError` on the first such record.
+- `read_ssort()` correctly parses Variant B files; previously it
+  misinterpreted col 0 (channel index) as a cluster label and col 1
+  (cluster label) as a spike count, producing nonsense data.
+- `Experiment.import_sorting_results()` no longer mis-allocates the
+  feature column count via `n_fields - 4`; features are now whatever
+  the caller supplies (or an empty `(n_spikes, 0)` array).  The
+  signature drops the redundant `n_fields` argument.
+- `Experiment._attach_sorting()` validates that the sorting record
+  count matches `ntrials * nelectrodes` and that no record claims more
+  spikes than `max_spikes`, with clear error messages instead of
+  cryptic NumPy failures.
 
 ## [0.1.0] - 2026-03-08
 
