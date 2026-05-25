@@ -85,18 +85,43 @@ def _read_lv_string(data: bytes, pos: int) -> tuple[str, int]:
 # DLTG container parsing
 # ---------------------------------------------------------------------------
 
+# Maximum number of records a single DLTG file can index in two-level mode:
+# 128 main-table entries × 128 sub-table entries.
+_DLTG_MAX_NDIM = 128 * 128
+
+
 def _read_dltg_header(f):
-    """Read a DLTG file header and return (ndim, offset_table, descriptor).
+    """Read a DLTG file header and return (ndim, offsets, descriptor).
+
+    The DLTG container uses two distinct addressing modes for the
+    fixed-size 128-entry offset table at byte ``p``, dispatched by
+    ``ndim``:
+
+    - **Direct mode** (``ndim <= 128``): entries ``[0..ndim-1]`` are
+      absolute byte offsets to records; remaining slots are zero.
+    - **Two-level mode** (``ndim > 128``): entries
+      ``[0..n_chunks-1]`` (where ``n_chunks = ceil(ndim / 128)``) are
+      absolute byte offsets to per-chunk sub-tables.  Each sub-table
+      is itself a 128 x u32 BE block of absolute record offsets.
+      Record ``i`` lives at ``sub_tables[i // 128][i % 128]``.  Max
+      supported ``ndim`` is ``128 * 128 = 16384``.
+
+    This function flattens both modes into a single 1-D array of
+    ``ndim`` absolute record offsets so callers don't need to care
+    which mode the file uses.
 
     Args:
         f: Open file handle positioned at byte 0.
 
     Returns:
-        Tuple of (ndim, offsets, descriptor) where *offsets* is an
-        ``np.ndarray`` of uint32 byte offsets to each dataset.
+        Tuple of (ndim, offsets, descriptor) where *offsets* is a
+        uint32 ``np.ndarray`` of length ``ndim``.
 
     Raises:
-        ValueError: If the file does not start with ``DTLG``.
+        ValueError: If the file does not start with ``DTLG``, or if
+            ``ndim`` exceeds the two-level mode capacity of 16384.
+        EOFError: If the file is truncated before the offset table or
+            any sub-table can be fully read.
     """
     magic = _read_exact(f, 4)
     if magic != b'DTLG':
@@ -109,31 +134,34 @@ def _read_dltg_header(f):
     ld = struct.unpack('>h', _read_exact(f, 2))[0]
     descriptor = _read_exact(f, ld).decode('ascii') if ld > 0 else ''
 
-    # Load offset table -- 128 entries per block; entry 127 chains to
-    # the next table when ndim > 127.
+    # Main offset table -- always 128 u32 BE entries at byte p
     f.seek(p)
-    if ndim <= 128:
-        raw = _read_exact(f, 128 * 4)
-        offs = np.frombuffer(raw, dtype='>u4')[:ndim].copy()
-    else:
-        offs = []
-        remaining = ndim
-        while remaining > 0:
-            raw = _read_exact(f, 128 * 4)
-            block = np.frombuffer(raw, dtype='>u4')
-            if remaining <= 127:
-                offs.extend(block[:remaining].tolist())
-                remaining = 0
-            else:
-                # First 127 entries are data offsets; entry 127 is
-                # the chain pointer to the next offset table.
-                offs.extend(block[:127].tolist())
-                remaining -= 127
-                next_table = int(block[127])
-                f.seek(next_table)
-        offs = offs[:ndim]
+    main_raw = _read_exact(f, 128 * 4)
+    main_tbl = np.frombuffer(main_raw, dtype='>u4')
 
-    return ndim, np.array(offs, dtype=np.uint32), descriptor
+    if ndim <= 128:
+        # Direct mode: main table entries ARE the record offsets
+        offsets = main_tbl[:ndim].astype(np.uint32).copy()
+    else:
+        # Two-level mode: each main entry points to a sub-table
+        if ndim > _DLTG_MAX_NDIM:
+            raise ValueError(
+                f"DLTG file declares ndim={ndim}, which exceeds the "
+                f"two-level addressing capacity of "
+                f"128*128={_DLTG_MAX_NDIM}"
+            )
+        n_chunks = (ndim + 127) // 128
+        offsets = np.empty(ndim, dtype=np.uint32)
+        written = 0
+        for ci in range(n_chunks):
+            f.seek(int(main_tbl[ci]))
+            sub_raw = _read_exact(f, 128 * 4)
+            sub = np.frombuffer(sub_raw, dtype='>u4')
+            take = min(128, ndim - written)
+            offsets[written:written + take] = sub[:take]
+            written += take
+
+    return ndim, offsets, descriptor
 
 
 # ---------------------------------------------------------------------------
@@ -176,10 +204,12 @@ def read_data(filename, dtype, nd):
             )
             count = int(np.prod(dims))
             nbytes = count * datasize
-            if nbytes > fsize:
+            remaining = fsize - f.tell()
+            if nbytes > remaining:
                 raise ValueError(
-                    f"Dataset at offset {off} claims {count} elements "
-                    f"({nbytes} bytes) but file is only {fsize} bytes"
+                    f"Dataset at offset {int(off)} claims {count} elements "
+                    f"({nbytes} bytes) but only {remaining} bytes "
+                    f"remain in the file"
                 )
             raw = _read_exact(f, nbytes)
             arr = np.frombuffer(raw, dtype=np_dtype, count=count).astype(

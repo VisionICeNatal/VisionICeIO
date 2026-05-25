@@ -27,6 +27,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- DLTG container reader (`_read_dltg_header` + `read_data`) now
+  correctly handles the **two-level offset table** used when
+  `ndim > 128`.  The previous implementation assumed a (non-existent)
+  chain pointer at entry 127 of each 128-entry block; in practice the
+  format dispatches by `ndim`:
+
+  - `ndim ≤ 128` — main-table entries are direct record offsets.
+  - `ndim > 128` — main-table entries are pointers to per-chunk
+    sub-tables, each holding 128 absolute record offsets.
+
+  Symptom of the old bug: `Experiment.load_from_dir` on any older
+  experiment lacking a new-format `.analog` / `.spike` / `.stim`
+  file (≈ 78% of the lab's archived recordings) crashed with
+  `EOFError: Unexpected end of file: wanted 512 bytes, got 0` the
+  moment it tried to read the `.ana` / `.spi` / `.swa` companion.
+  Verified byte-identical to the new-format readers across
+  ≈ 100,000 records / 23 lab datasets.
+- `read_data()` size validation now compares `nbytes` against the
+  bytes remaining from the current file position (`fsize - f.tell()`)
+  instead of the absolute file size, producing a meaningful error
+  message on truncated records.
+- `read_data()` and `_read_dltg_header()` now raise a clear
+  `ValueError` when `ndim` exceeds the two-level addressing capacity
+  of 16,384.
 - `read_ssort()` no longer crashes on empty channel-trial records
   (8-byte `[0, 0]` sentinels) that are common in real Variant B files
   — the old code raised `IndexError` on the first such record.

@@ -57,11 +57,23 @@ All four data files share the DTLG container format:
 | 16     | 2 B  | `ld`: length of the descriptor string |
 | 18     | ld B | Descriptor (ASCII) |
 
-After the header, a table of 128 × 4-byte offsets points to individual data
-blocks. For files with more than 128 blocks, offsets are chained recursively.
+After the header, byte `p` holds a fixed-size **128 × 4-byte offset
+table**.  This table is dispatched by `ndim`:
 
-Each data block starts with dimension sizes (big-endian int32, one per
-dimension), followed by the raw data in row-major (C) order.
+- **Direct mode** (`ndim ≤ 128`).  Entries `[0..ndim-1]` are absolute
+  byte offsets to records; remaining slots are zero-filled.
+- **Two-level mode** (`ndim > 128`).  Entries `[0..n_chunks-1]`
+  (where `n_chunks = ceil(ndim / 128)`) are absolute byte offsets to
+  per-chunk **sub-tables**.  Each sub-table is itself a 128 × u32 BE
+  block of absolute record offsets, with unused trailing slots
+  zero-filled.  Record `i` is found at
+  `sub_tables[i // 128][i % 128]`.  Maximum supported `ndim` is
+  `128 × 128 = 16384`.
+
+Each data block (record) starts with `nd` dimension sizes
+(big-endian int32, where `nd` is the per-file dimensionality given
+in the table below), followed by `prod(dims) × itemsize` bytes of
+raw data in row-major (C) order.
 
 ### Old format file types
 
