@@ -71,12 +71,19 @@ DLTG Binary Format Notes
 -------------------------
 
 When adding support for new DLTG file types, refer to
-``docs/data_format.md`` for the container layout. Key points:
+``docs/data_format.md`` for the full container layout. Key points:
 
 - 4-byte magic ``DTLG`` (big-endian).
-- Offset tables hold 128 entries each; the last entry chains to the next table.
+- The 128-entry offset table at byte ``p`` is dispatched by ``ndim``:
+
+  - ``ndim <= 128`` -- direct mode: entries are absolute record offsets.
+  - ``ndim > 128``  -- two-level mode: entries point to per-chunk
+    sub-tables, each itself a 128 x u32 BE block of absolute record
+    offsets.  Maximum addressable ``ndim`` is ``128 * 128 = 16384``.
+
 - String datasets store a 4-byte signed length prefix followed by raw bytes.
-- Numeric datasets store a 4-byte dimension prefix followed by data.
+- Numeric datasets store ``nd`` 4-byte big-endian dimension sizes
+  followed by ``prod(dims) * itemsize`` bytes of row-major data.
 - All multi-byte integers are big-endian.
 
 Release Checklist

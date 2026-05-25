@@ -104,10 +104,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- DLTG offset-table chaining for files with more than 128 datasets now
-  correctly follows chain pointers at entry 127 of each block.
 - DLTG header parsing uses `_read_exact()` throughout, giving clear
   `EOFError` messages on truncated files instead of cryptic `struct.error`.
+- DLTG offset-table reading for files with more than 128 datasets was
+  re-worked to follow what was *believed* at the time to be a chain
+  pointer at entry 127 of each block.  This understanding turned out
+  to be wrong; the real format uses a two-level addressing scheme and
+  the actual fix is documented under `[Unreleased]`.
 - Zarr encoding now auto-detects the installed zarr version and uses the
   correct API: ``"compressor"`` key with ``numcodecs.Blosc`` for zarr v2,
   ``"compressors"`` key with ``zarr.codecs.BloscCodec`` for zarr v3.
