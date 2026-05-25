@@ -97,7 +97,8 @@ class TestLoadSpikeIndices:
             name = "test_exp"
             _write_spike_file(tmpdir, name, records)
             _write_info_file(
-                tmpdir, name,
+                tmpdir,
+                name,
                 n_trials=n_trials,
                 n_spike_ch=n_ch,
                 n_waveform_ch=n_ch,
@@ -158,9 +159,7 @@ class TestAttachSortingValidation:
 
     def test_rejects_wrong_record_count(self):
         exp = _make_minimal_exp(ntrials=2, nelectrodes=2, max_spikes=3)
-        records = [
-            {"n_spikes": 0, "labels": np.empty(0, dtype=np.int32)}
-        ] * 3  # 3 instead of 4
+        records = [{"n_spikes": 0, "labels": np.empty(0, dtype=np.int32)}] * 3  # 3 instead of 4
         with pytest.raises(ValueError, match="record count"):
             exp._attach_sorting(records)
 
@@ -205,10 +204,10 @@ class TestImportSortingResults:
         indices = [np.array([10.0, 20.0], dtype=np.float32)]
         amp_max = [np.array([200.0, 210.0], dtype=np.float32)]
         result = exp.import_sorting_results(
-            labels, indices, amp_max_per_record=amp_max,
+            labels,
+            indices,
+            amp_max_per_record=amp_max,
         )
-        np.testing.assert_array_almost_equal(
-            result[0]["amp_max"], [200.0, 210.0]
-        )
+        np.testing.assert_array_almost_equal(result[0]["amp_max"], [200.0, 210.0])
         # other named columns default to zeros
         np.testing.assert_array_equal(result[0]["amp_min"], [0.0, 0.0])

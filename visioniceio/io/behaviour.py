@@ -23,6 +23,7 @@ from ._helpers import (
 # Old format: .bhv (DLTG container)
 # ---------------------------------------------------------------------------
 
+
 def read_bhv(filepath: str | Path) -> dict:
     """Read a ``.bhv`` (behaviour) DLTG file.
 
@@ -61,10 +62,10 @@ def read_bhv(filepath: str | Path) -> dict:
     string_datasets: list[str] = []
     raw_blocks: list[bytes] = []
 
-    with open(filepath, 'rb') as f:
+    with open(filepath, "rb") as f:
         ndim, offsets, descriptor = _read_dltg_header(f)
-        result['_descriptor'] = descriptor
-        result['_n_datasets'] = ndim
+        result["_descriptor"] = descriptor
+        result["_n_datasets"] = ndim
 
         for off in offsets:
             f.seek(int(off))
@@ -72,7 +73,7 @@ def read_bhv(filepath: str | Path) -> dict:
             str_len_raw = f.read(4)
             if len(str_len_raw) < 4:
                 continue
-            str_len = struct.unpack('>i', str_len_raw)[0]
+            str_len = struct.unpack(">i", str_len_raw)[0]
 
             # Sanity: if str_len is unreasonable, treat as numeric block
             f.seek(int(off))
@@ -80,13 +81,13 @@ def read_bhv(filepath: str | Path) -> dict:
                 _read_exact(f, 4)  # skip length prefix
                 raw_bytes = _read_exact(f, str_len)
                 try:
-                    text = raw_bytes.decode('ascii').strip()
+                    text = raw_bytes.decode("ascii").strip()
                     string_datasets.append(text)
                     # Extract key:value pairs if present
                     for line in text.splitlines():
                         line = line.strip()
-                        if ':' in line:
-                            key, val = map(str.strip, line.split(':', 1))
+                        if ":" in line:
+                            key, val = map(str.strip, line.split(":", 1))
                             result[key] = _parse_metadata_value(val)
                     continue
                 except (UnicodeDecodeError, ValueError):
@@ -103,9 +104,9 @@ def read_bhv(filepath: str | Path) -> dict:
                 raw_blocks.append(f.read(4096))
 
     if string_datasets:
-        result['strings'] = string_datasets
+        result["strings"] = string_datasets
     if raw_blocks:
-        result['raw_blocks'] = raw_blocks
+        result["raw_blocks"] = raw_blocks
 
     return result
 
@@ -113,6 +114,7 @@ def read_bhv(filepath: str | Path) -> dict:
 # ---------------------------------------------------------------------------
 # New format: .behave (headerless)
 # ---------------------------------------------------------------------------
+
 
 def read_behave_new(filepath: str | Path) -> np.ndarray:
     """Read a new-format ``.behave`` behaviour file.

@@ -69,10 +69,10 @@ class Experiment:
 
     # Dispatch table: data_type -> (new_ext, new_reader, old_ext, old_dtype, old_ndim)
     _READERS = {
-        'spike':    ('.spike',  read_spike_new,  '.spi', 'uint32', 1),
-        'waveform': ('.swave',  read_swave_new,  '.swa', 'int16', 2),
-        'stim':     ('.stim',   read_stim_new,   '.stm', 'int32', 1),
-        'analog':   ('.analog', read_analog_new,  '.ana', 'int16', 1),
+        "spike": (".spike", read_spike_new, ".spi", "uint32", 1),
+        "waveform": (".swave", read_swave_new, ".swa", "int16", 2),
+        "stim": (".stim", read_stim_new, ".stm", "int32", 1),
+        "analog": (".analog", read_analog_new, ".ana", "int16", 1),
     }
 
     def __init__(self):
@@ -100,12 +100,10 @@ class Experiment:
         new_path = os.path.join(self.path, self.name + new_ext)
         old_path = os.path.join(self.path, self.name + old_ext)
         if os.path.exists(new_path):
-            return new_path, 'new'
+            return new_path, "new"
         if os.path.exists(old_path):
-            return old_path, 'old'
-        raise FileNotFoundError(
-            f"Neither {new_path} nor {old_path} found."
-        )
+            return old_path, "old"
+        raise FileNotFoundError(f"Neither {new_path} nor {old_path} found.")
 
     def _read_raw(self, data_type: str) -> list | tuple | np.ndarray:
         """Read raw data for *data_type*, auto-detecting file format.
@@ -127,9 +125,7 @@ class Experiment:
               underlying reader (typically a ``list[np.ndarray]`` or a
               single ``np.ndarray``).
         """
-        new_ext, new_reader, old_ext, old_dtype, old_ndim = (
-            self._READERS[data_type]
-        )
+        new_ext, new_reader, old_ext, old_dtype, old_ndim = self._READERS[data_type]
         new_path = os.path.join(self.path, self.name + new_ext)
         old_path = os.path.join(self.path, self.name + old_ext)
 
@@ -137,16 +133,14 @@ class Experiment:
             return new_reader(new_path)
         if os.path.exists(old_path):
             records = read_data(old_path, old_dtype, old_ndim)
-            if data_type == 'waveform':
+            if data_type == "waveform":
                 # .swa records are 2-D (n_spikes, wf_pts); derive wf_pts
                 # from the first record so the old-format branch matches
                 # the (data, wf_pts) shape returned by read_swave_new.
                 wf_pts = int(records[0].shape[1]) if records else 0
                 return records, wf_pts
             return records
-        raise FileNotFoundError(
-            f"Neither {new_path} nor {old_path} found."
-        )
+        raise FileNotFoundError(f"Neither {new_path} nor {old_path} found.")
 
     # ------------------------------------------------------------------
     # Metadata loading
@@ -167,9 +161,9 @@ class Experiment:
         Raises:
             FileNotFoundError: If no readable metadata file is found.
         """
-        info_new = os.path.join(self.path, self.name + '.info')
-        ifo_bin = os.path.join(self.path, self.name + '.ifo')
-        ifo_txt = os.path.join(self.path, self.name + '-ifo.txt')
+        info_new = os.path.join(self.path, self.name + ".info")
+        ifo_bin = os.path.join(self.path, self.name + ".ifo")
+        ifo_txt = os.path.join(self.path, self.name + "-ifo.txt")
 
         # Try new-format .info (PTH0 container)
         if os.path.exists(info_new):
@@ -191,8 +185,7 @@ class Experiment:
             return read_metadata(ifo_txt)
 
         raise FileNotFoundError(
-            f"No metadata file found. Looked for:\n"
-            f"  {info_new}\n  {ifo_bin}\n  {ifo_txt}"
+            f"No metadata file found. Looked for:\n  {info_new}\n  {ifo_bin}\n  {ifo_txt}"
         )
 
     # ------------------------------------------------------------------
@@ -207,10 +200,10 @@ class Experiment:
             For old format: dict from ``read_bhv``.
             ``None`` if no behaviour file exists.
         """
-        behave_path = os.path.join(self.path, self.name + '.behave')
+        behave_path = os.path.join(self.path, self.name + ".behave")
         if os.path.exists(behave_path):
             return read_behave_new(behave_path)
-        bhv_path = os.path.join(self.path, self.name + '.bhv')
+        bhv_path = os.path.join(self.path, self.name + ".bhv")
         if os.path.exists(bhv_path):
             return read_bhv(bhv_path)
         return None
@@ -225,17 +218,15 @@ class Experiment:
         self.behaviour = bhv_data
         if isinstance(bhv_data, np.ndarray):
             # New format: simple int array
-            self.data.attrs['bhv_codes'] = bhv_data.tolist()
+            self.data.attrs["bhv_codes"] = bhv_data.tolist()
         elif isinstance(bhv_data, dict):
             for k, v in bhv_data.items():
-                if k.startswith('_'):
+                if k.startswith("_"):
                     continue
                 if isinstance(v, (bool, int, float, str)):
                     self.data.attrs[f"bhv_{k}"] = v
-            if 'strings' in bhv_data:
-                self.data.attrs['bhv_strings'] = '\n'.join(
-                    bhv_data['strings']
-                )
+            if "strings" in bhv_data:
+                self.data.attrs["bhv_strings"] = "\n".join(bhv_data["strings"])
 
     # ------------------------------------------------------------------
     # Padding / reshaping helpers
@@ -257,7 +248,7 @@ class Experiment:
                 np.pad(
                     s.astype(np.float32) / sample_rate,
                     (0, max_spikes - s.shape[0]),
-                    'constant',
+                    "constant",
                     constant_values=np.nan,
                 )
                 for s in spike_data
@@ -280,7 +271,7 @@ class Experiment:
                 np.pad(
                     da.astype(np.float32),
                     ((0, max_spikes - da.shape[0]), (0, 0)),
-                    'constant',
+                    "constant",
                     constant_values=np.nan,
                 )
                 for da in wave_data
@@ -313,7 +304,7 @@ class Experiment:
         self,
         path=None,
         name=None,
-        save_as='zarr',
+        save_as="zarr",
         load_bhv: bool = False,
     ):
         """Load the data and metadata from the experiment directory.
@@ -332,16 +323,16 @@ class Experiment:
         self.path = path
         self.name = name
         self.metadata = self._load_metadata()
-        self.sample_rate_spike = self.metadata['SpikeSamplingFrequency']
-        self.sample_rate_lfp = self.metadata['AnalogSamplingFrequency']
-        self.snippet_points = self.metadata['NofPointsSpikewaveform']
-        self.lfp_points = self.metadata['MaxTrialLength']
-        self.ntrials = self.metadata['NofTrials']
-        self.nelectrodes = self.metadata['NofSpikeChannels']
+        self.sample_rate_spike = self.metadata["SpikeSamplingFrequency"]
+        self.sample_rate_lfp = self.metadata["AnalogSamplingFrequency"]
+        self.snippet_points = self.metadata["NofPointsSpikewaveform"]
+        self.lfp_points = self.metadata["MaxTrialLength"]
+        self.ntrials = self.metadata["NofTrials"]
+        self.nelectrodes = self.metadata["NofSpikeChannels"]
 
         self._load_data(load_bhv)
 
-        if save_as == 'zarr':
+        if save_as == "zarr":
             encoding = _zarr_encoding(self.data.data_vars)
             output_path = os.path.join(self.path, f"{self.name}.zarr")
             self.data.to_zarr(
@@ -360,23 +351,17 @@ class Experiment:
         """Load spike, waveform, stim and analog data from either format."""
 
         # --- Spike times ---
-        spike_data = self._read_raw('spike')
-        self._n_spikes = np.array(
-            [s.shape[0] for s in spike_data], dtype=np.int32
-        )
+        spike_data = self._read_raw("spike")
+        self._n_spikes = np.array([s.shape[0] for s in spike_data], dtype=np.int32)
         self.max_spikes = int(self._n_spikes.max())
 
-        d_spi = self._pad_spike_times(
-            spike_data, self.max_spikes, self.sample_rate_spike
-        )
-        d_spi = self._to_electrode_major(
-            d_spi, self.ntrials, self.nelectrodes, self.max_spikes
-        )
+        d_spi = self._pad_spike_times(spike_data, self.max_spikes, self.sample_rate_spike)
+        d_spi = self._to_electrode_major(d_spi, self.ntrials, self.nelectrodes, self.max_spikes)
 
         # --- Waveforms ---
         # _read_raw('waveform') always returns (records, wf_pts) — the
         # old-format branch derives wf_pts from records[0].shape[1].
-        wave_data, wf_pts = self._read_raw('waveform')
+        wave_data, wf_pts = self._read_raw("waveform")
         if wf_pts:
             self.snippet_points = wf_pts
 
@@ -391,81 +376,75 @@ class Experiment:
 
         # --- Build core dataset ---
         coords_et = {
-            'electrodes': np.arange(self.nelectrodes),
-            'trials': np.arange(self.ntrials),
+            "electrodes": np.arange(self.nelectrodes),
+            "trials": np.arange(self.ntrials),
         }
 
         self.waveforms = xr.DataArray(
             data=d_wav,
-            name='waveforms',
-            dims=('electrodes', 'trials', 'spikes_idx', 'snippet_time'),
+            name="waveforms",
+            dims=("electrodes", "trials", "spikes_idx", "snippet_time"),
             coords={
                 **coords_et,
-                'spikes_idx': np.arange(self.max_spikes),
-                'snippet_time': (
-                    np.arange(self.snippet_points) / self.sample_rate_spike
-                ),
+                "spikes_idx": np.arange(self.max_spikes),
+                "snippet_time": (np.arange(self.snippet_points) / self.sample_rate_spike),
             },
         )
         self.n_spikes = xr.DataArray(
-            data=self._n_spikes.reshape(
-                self.ntrials, self.nelectrodes
-            ).T,
-            name='n_spikes',
-            dims=('electrodes', 'trials'),
+            data=self._n_spikes.reshape(self.ntrials, self.nelectrodes).T,
+            name="n_spikes",
+            dims=("electrodes", "trials"),
             coords={
-                'electrodes': np.arange(self.nelectrodes),
-                'trials': np.arange(self.ntrials),
+                "electrodes": np.arange(self.nelectrodes),
+                "trials": np.arange(self.ntrials),
             },
         )
         self.spike_times = xr.DataArray(
             data=d_spi,
-            name='spike_times',
-            dims=('electrodes', 'trials', 'spikes_idx'),
+            name="spike_times",
+            dims=("electrodes", "trials", "spikes_idx"),
             coords={
                 **coords_et,
-                'spikes_idx': np.arange(self.max_spikes),
+                "spikes_idx": np.arange(self.max_spikes),
             },
         )
         self.data = xr.Dataset(
             data_vars={
-                'waveforms': self.waveforms,
-                'n_spikes': self.n_spikes,
-                'spike_times': self.spike_times,
+                "waveforms": self.waveforms,
+                "n_spikes": self.n_spikes,
+                "spike_times": self.spike_times,
             },
             attrs=self.metadata,
         )
 
         # --- Stimulus labels ---
-        stim_result = self._read_raw('stim')
+        stim_result = self._read_raw("stim")
         if isinstance(stim_result, list):
             # Old format returns list of arrays; stim has one dataset
-            stim_arr = np.array(stim_result[0], dtype='int32')
+            stim_arr = np.array(stim_result[0], dtype="int32")
         else:
             stim_arr = stim_result
         self.stim_label = xr.DataArray(
             data=stim_arr,
-            name='stim_label',
-            dims=['trials'],
-            coords={'trials': np.arange(self.ntrials)},
+            name="stim_label",
+            dims=["trials"],
+            coords={"trials": np.arange(self.ntrials)},
         )
         self.data = self.data.merge(self.stim_label.to_dataset())
 
         # --- Analog / LFP ---
-        ana_data = self._read_raw('analog')
-        d_ana = np.array(ana_data, dtype='int16').reshape(
+        ana_data = self._read_raw("analog")
+        d_ana = np.array(ana_data, dtype="int16").reshape(
             self.ntrials, self.nelectrodes, self.lfp_points
         )
         d_ana = np.ascontiguousarray(d_ana.swapaxes(0, 1))
         self.lfp = xr.DataArray(
             data=d_ana,
-            name='lfp',
-            dims=('electrodes', 'trials', 'lfp_time'),
+            name="lfp",
+            dims=("electrodes", "trials", "lfp_time"),
             coords={
                 **coords_et,
-                'lfp_time': (
-                    np.arange(self.lfp_points) / self.sample_rate_lfp
-                ),
+                "lfp_time": (np.arange(self.lfp_points) / self.sample_rate_lfp),
             },
         )
         self.data = self.data.merge(self.lfp.to_dataset())
@@ -492,7 +471,7 @@ class Experiment:
         Raises:
             FileNotFoundError: If neither ``.spike`` nor ``.spi`` file exists.
         """
-        spike_data = self._read_raw('spike')
+        spike_data = self._read_raw("spike")
         return [arr.astype(np.int32) for arr in spike_data]
 
     # ------------------------------------------------------------------
@@ -530,7 +509,7 @@ class Experiment:
         # Records are trial-major, channel-minor — same order as spike_times
         labels_flat = []
         for i, r in enumerate(records):
-            n_sp = int(r['n_spikes'])
+            n_sp = int(r["n_spikes"])
             if n_sp > self.max_spikes:
                 raise ValueError(
                     f"Record {i} has {n_sp} spikes but the Experiment "
@@ -538,7 +517,7 @@ class Experiment:
                     "The sorter cannot add spikes beyond the original "
                     "detector output."
                 )
-            labels = np.asarray(r['labels']).astype(np.float32)
+            labels = np.asarray(r["labels"]).astype(np.float32)
             labels_flat.append(
                 np.pad(
                     labels,
@@ -554,13 +533,13 @@ class Experiment:
         )
 
         # Add cluster_labels to self.data
-        self.data['cluster_labels'] = xr.DataArray(
+        self.data["cluster_labels"] = xr.DataArray(
             data=labels_arr,
-            dims=('electrodes', 'trials', 'spikes_idx'),
+            dims=("electrodes", "trials", "spikes_idx"),
             coords={
-                'electrodes': self.data.electrodes,
-                'trials': self.data.trials,
-                'spikes_idx': self.data.spikes_idx,
+                "electrodes": self.data.electrodes,
+                "trials": self.data.trials,
+                "spikes_idx": self.data.spikes_idx,
             },
         )
 
@@ -592,11 +571,9 @@ class Experiment:
                 counts are incompatible with the loaded experiment.
         """
         if filepath is None:
-            filepath = os.path.join(self.path, self.name + '.ssort')
+            filepath = os.path.join(self.path, self.name + ".ssort")
         if not os.path.exists(filepath):
-            raise FileNotFoundError(
-                f"Sorting file not found: {filepath}"
-            )
+            raise FileNotFoundError(f"Sorting file not found: {filepath}")
         records = read_ssort(filepath)
         self._attach_sorting(records)
         return records
@@ -652,19 +629,15 @@ class Experiment:
             str: The path the file was written to.
         """
         if filepath is None:
-            filepath = os.path.join(self.path, self.name + '.ssort')
+            filepath = os.path.join(self.path, self.name + ".ssort")
 
         # Default channel / trial indices from the record's position when
         # the experiment has been loaded (so a roundtrip preserves them).
         n_records = len(labels_per_record)
-        if (channel_indices is None and self.nelectrodes is not None):
-            channel_indices = [
-                i % self.nelectrodes for i in range(n_records)
-            ]
+        if channel_indices is None and self.nelectrodes is not None:
+            channel_indices = [i % self.nelectrodes for i in range(n_records)]
         if trial_indices is None and self.nelectrodes is not None:
-            trial_indices = [
-                i // self.nelectrodes for i in range(n_records)
-            ]
+            trial_indices = [i // self.nelectrodes for i in range(n_records)]
 
         write_ssort(
             filepath,
@@ -748,42 +721,38 @@ class Experiment:
             """Resolve a per-record array, returning zeros if missing."""
             if arr_list is None:
                 return np.zeros(n_spikes, dtype=np.float32)
-            entry = arr_list[i] if arr_list[i] is not None else \
-                np.zeros(n_spikes, dtype=np.float32)
+            entry = arr_list[i] if arr_list[i] is not None else np.zeros(n_spikes, dtype=np.float32)
             return np.asarray(entry, dtype=np.float32)
 
         records: list[dict] = []
         for i in range(n_records):
             labels = np.asarray(labels_per_record[i], dtype=np.int32)
-            spike_idx = np.asarray(
-                spike_indices_per_record[i], dtype=np.float32
-            )
+            spike_idx = np.asarray(spike_indices_per_record[i], dtype=np.float32)
             n_spikes = int(labels.shape[0])
 
-            if features_per_record is not None and \
-                    features_per_record[i] is not None:
+            if features_per_record is not None and features_per_record[i] is not None:
                 feat = np.asarray(features_per_record[i], dtype=np.float32)
                 if feat.ndim == 1:
                     feat = feat.reshape(-1, 1)
             else:
                 feat = np.empty((n_spikes, 0), dtype=np.float32)
 
-            records.append({
-                'channel_idx': int(channel_indices[i]),
-                'n_spikes': n_spikes,
-                'trial_idx': int(trial_indices[i]),
-                'stim_condition': int(stim_conditions[i]),
-                'variant': 'v10',
-                'labels': labels,
-                'spike_indices': spike_idx,
-                'amp_max': _per_record(amp_max_per_record, n_spikes),
-                'amp_min': _per_record(amp_min_per_record, n_spikes),
-                'peak_to_peak': _per_record(
-                    peak_to_peak_per_record, n_spikes
-                ),
-                'width': _per_record(width_per_record, n_spikes),
-                'features': feat,
-            })
+            records.append(
+                {
+                    "channel_idx": int(channel_indices[i]),
+                    "n_spikes": n_spikes,
+                    "trial_idx": int(trial_indices[i]),
+                    "stim_condition": int(stim_conditions[i]),
+                    "variant": "v10",
+                    "labels": labels,
+                    "spike_indices": spike_idx,
+                    "amp_max": _per_record(amp_max_per_record, n_spikes),
+                    "amp_min": _per_record(amp_min_per_record, n_spikes),
+                    "peak_to_peak": _per_record(peak_to_peak_per_record, n_spikes),
+                    "width": _per_record(width_per_record, n_spikes),
+                    "features": feat,
+                }
+            )
 
         self._attach_sorting(records)
         return records

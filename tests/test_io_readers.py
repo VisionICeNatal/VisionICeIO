@@ -154,7 +154,7 @@ class TestSwaSwaveEquivalence:
         for n, w in shapes:
             count = n * w
             arr = (np.arange(count, dtype=np.int32) + offset) % 1024
-            arr = (arr.astype(np.int16) - 512)  # mix in negative values
+            arr = arr.astype(np.int16) - 512  # mix in negative values
             recs.append(arr.reshape(n, w))
             offset += count
         return recs
@@ -174,8 +174,7 @@ class TestSwaSwaveEquivalence:
         assert len(swa) == len(swave) == len(records)
         for i, (a, b, orig) in enumerate(zip(swa, swave, records)):
             assert a.shape == b.shape == orig.shape, (
-                f"shape mismatch at record {i}: "
-                f".swa={a.shape}, .swave={b.shape}, orig={orig.shape}"
+                f"shape mismatch at record {i}: .swa={a.shape}, .swave={b.shape}, orig={orig.shape}"
             )
             np.testing.assert_array_equal(
                 a, b, err_msg=f"swa vs swave value mismatch at record {i}"
@@ -188,12 +187,8 @@ class TestSwaSwaveEquivalence:
         """All-singleton records (n_spikes=1) — common in low-activity trials."""
         wf_pts = 38
         records = self._make_records([(1, wf_pts)] * 10)
-        swa = read_data(
-            str(_tmpfile(_build_swa_bytes(records), ".swa")), "int16", 2
-        )
-        swave, _ = read_swave_new(
-            str(_tmpfile(_build_swave_bytes(records, wf_pts), ".swave"))
-        )
+        swa = read_data(str(_tmpfile(_build_swa_bytes(records), ".swa")), "int16", 2)
+        swave, _ = read_swave_new(str(_tmpfile(_build_swave_bytes(records, wf_pts), ".swave")))
         for a, b in zip(swa, swave):
             np.testing.assert_array_equal(a, b)
 
@@ -268,9 +263,7 @@ class TestSsortRoundtrip:
         assert records[0]["n_spikes"] == 3
         assert records[1]["n_spikes"] == 2
         np.testing.assert_array_equal(records[0]["labels"], [0, 1, 2])
-        np.testing.assert_array_almost_equal(
-            records[0]["spike_indices"], [10.0, 20.0, 30.0]
-        )
+        np.testing.assert_array_almost_equal(records[0]["spike_indices"], [10.0, 20.0, 30.0])
 
     def test_empty_record(self):
         labels = [np.array([], dtype=np.int32)]
@@ -295,7 +288,10 @@ class TestSsortRoundtrip:
 
         path = _tmpfile(b"", ".ssort")
         write_ssort(
-            path, labels, indices, n_fields=10,
+            path,
+            labels,
+            indices,
+            n_fields=10,
             amp_max_per_record=amp_max,
             amp_min_per_record=amp_min,
             peak_to_peak_per_record=p2p,
@@ -304,18 +300,10 @@ class TestSsortRoundtrip:
         records = read_ssort(path)
         assert records[0]["variant"] == "v10"
         np.testing.assert_array_equal(records[0]["labels"], [1, 2, 3])
-        np.testing.assert_array_almost_equal(
-            records[0]["amp_max"], [200.0, 210.0, 220.0]
-        )
-        np.testing.assert_array_almost_equal(
-            records[0]["amp_min"], [-100.0, -110.0, -120.0]
-        )
-        np.testing.assert_array_almost_equal(
-            records[0]["peak_to_peak"], [300.0, 320.0, 340.0]
-        )
-        np.testing.assert_array_almost_equal(
-            records[0]["width"], [8.0, 10.0, 12.0]
-        )
+        np.testing.assert_array_almost_equal(records[0]["amp_max"], [200.0, 210.0, 220.0])
+        np.testing.assert_array_almost_equal(records[0]["amp_min"], [-100.0, -110.0, -120.0])
+        np.testing.assert_array_almost_equal(records[0]["peak_to_peak"], [300.0, 320.0, 340.0])
+        np.testing.assert_array_almost_equal(records[0]["width"], [8.0, 10.0, 12.0])
 
 
 class TestSsortV16:
@@ -348,20 +336,28 @@ class TestSsortV16:
         ]
         # 6 feature columns for v16 (cols 10..15)
         features = [
-            np.array([
-                [266.9, -8.5, -103.6, 125.8, 4.4, 23.3],
-                [270.8, -16.5, 42.0, -4.2, 41.1, -75.1],
-                [270.5, -8.5, -103.6, 125.8, 4.4, 23.3],
-            ], dtype=np.float32),
-            np.array([
-                [267.0, 1.0, 2.0, 3.0, 4.0, 5.0],
-                [268.0, -1.0, -2.0, -3.0, -4.0, -5.0],
-            ], dtype=np.float32),
+            np.array(
+                [
+                    [266.9, -8.5, -103.6, 125.8, 4.4, 23.3],
+                    [270.8, -16.5, 42.0, -4.2, 41.1, -75.1],
+                    [270.5, -8.5, -103.6, 125.8, 4.4, 23.3],
+                ],
+                dtype=np.float32,
+            ),
+            np.array(
+                [
+                    [267.0, 1.0, 2.0, 3.0, 4.0, 5.0],
+                    [268.0, -1.0, -2.0, -3.0, -4.0, -5.0],
+                ],
+                dtype=np.float32,
+            ),
         ]
 
         path = _tmpfile(b"", ".ssort")
         write_ssort(
-            path, labels, indices,
+            path,
+            labels,
+            indices,
             features_per_record=features,
             n_fields=16,  # selects Variant B
             channel_indices=[0, 1],
@@ -383,31 +379,19 @@ class TestSsortV16:
         assert records[0]["n_spikes"] == 3
         # Per-spike fields
         np.testing.assert_array_equal(records[0]["labels"], [3, 5, 5])
-        np.testing.assert_array_almost_equal(
-            records[0]["spike_indices"], [1234.0, 5678.0, 9012.0]
-        )
-        np.testing.assert_array_almost_equal(
-            records[0]["amp_max"], [196, 206, 208]
-        )
-        np.testing.assert_array_almost_equal(
-            records[0]["amp_min"], [-104, -97, -104]
-        )
-        np.testing.assert_array_almost_equal(
-            records[0]["peak_to_peak"], [300, 303, 312]
-        )
-        np.testing.assert_array_almost_equal(
-            records[0]["width"], [8, 17, 21]
-        )
-        np.testing.assert_array_almost_equal(
-            records[0]["features"], features[0]
-        )
+        np.testing.assert_array_almost_equal(records[0]["spike_indices"], [1234.0, 5678.0, 9012.0])
+        np.testing.assert_array_almost_equal(records[0]["amp_max"], [196, 206, 208])
+        np.testing.assert_array_almost_equal(records[0]["amp_min"], [-104, -97, -104])
+        np.testing.assert_array_almost_equal(records[0]["peak_to_peak"], [300, 303, 312])
+        np.testing.assert_array_almost_equal(records[0]["width"], [8, 17, 21])
+        np.testing.assert_array_almost_equal(records[0]["features"], features[0])
 
     def test_v16_empty_record_among_real_data(self):
         """Empty records (n_entries=0) must round-trip cleanly within a v16
         file that also has non-empty records (so the variant is detectable)."""
         labels = [
             np.array([1, 2], dtype=np.int32),
-            np.array([], dtype=np.int32),   # empty
+            np.array([], dtype=np.int32),  # empty
             np.array([3], dtype=np.int32),
         ]
         indices = [
@@ -465,12 +449,13 @@ class TestSsortVariantDetection:
     def test_v16_byte_layout(self):
         """Hand-built v16 bytes parse with the expected per-row decoding."""
         import struct as _s
+
         # One record, 1 spike: channel=2, cluster=7, trial=3, sample=12345,
         # stim=4, reserved=0, amp_max=200, amp_min=-80, p2p=280, width=10,
         # extra=265.5, pca1..5=10,20,30,40,50
         row = np.array(
-            [2, 7, 3, 12345, 4, 0, 200, -80, 280, 10,
-             265.5, 10, 20, 30, 40, 50], dtype='>f4',
+            [2, 7, 3, 12345, 4, 0, 200, -80, 280, 10, 265.5, 10, 20, 30, 40, 50],
+            dtype=">f4",
         )
         buf = _s.pack(">II", 1, 16) + row.tobytes()
         path = _tmpfile(buf, ".ssort")
@@ -487,6 +472,4 @@ class TestSsortVariantDetection:
         assert r["amp_min"].tolist() == [-80.0]
         assert r["peak_to_peak"].tolist() == [280.0]
         assert r["width"].tolist() == [10.0]
-        np.testing.assert_array_almost_equal(
-            r["features"][0], [265.5, 10, 20, 30, 40, 50]
-        )
+        np.testing.assert_array_almost_equal(r["features"][0], [265.5, 10, 20, 30, 40, 50])

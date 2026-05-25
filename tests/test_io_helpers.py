@@ -190,9 +190,7 @@ def _build_dltg(records: list[bytes], dtype: str = "int32") -> bytes:
         sub_table_offsets: list[int] = []
     else:
         records_start = p + 128 * 4 + n_chunks * 128 * 4
-        sub_table_offsets = [
-            p + 128 * 4 + ci * 128 * 4 for ci in range(n_chunks)
-        ]
+        sub_table_offsets = [p + 128 * 4 + ci * 128 * 4 for ci in range(n_chunks)]
 
     # Compute absolute offset of every record
     record_abs_offsets: list[int] = []
@@ -206,10 +204,10 @@ def _build_dltg(records: list[bytes], dtype: str = "int32") -> bytes:
     buf = bytearray()
     # DLTG header
     buf += b"DTLG"
-    buf += b"\x00\x00\x00\x01"           # version
+    buf += b"\x00\x00\x00\x01"  # version
     buf += struct.pack(">I", ndim)
     buf += struct.pack(">I", p)
-    buf += struct.pack(">h", 0)          # ld = 0 (no descriptor)
+    buf += struct.pack(">h", 0)  # ld = 0 (no descriptor)
     assert len(buf) == header_size
 
     # Main offset table (128 entries)
@@ -326,9 +324,9 @@ class TestDLTGTwoLevelMode:
         buf += b"DTLG"
         buf += b"\x00\x00\x00\x01"
         buf += struct.pack(">I", ndim)
-        buf += struct.pack(">I", 18)        # p (table right after header)
-        buf += struct.pack(">h", 0)         # ld
-        buf += b"\x00" * (128 * 4)          # main table (zeros)
+        buf += struct.pack(">I", 18)  # p (table right after header)
+        buf += struct.pack(">h", 0)  # ld
+        buf += b"\x00" * (128 * 4)  # main table (zeros)
         return bytes(buf)
 
     def test_ndim_overflow_raises(self):

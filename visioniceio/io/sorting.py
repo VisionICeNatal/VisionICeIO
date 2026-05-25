@@ -45,7 +45,7 @@ Spike rows (entries ``1..n_spikes``):
     ===== =========================
 
 Variant B -- ``n_fields == 16``, no header, redundant per-row metadata
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 ``n_entries == n_spikes``.  Every row is one spike; channel/trial/stim
 are stamped redundantly on every row.
@@ -109,7 +109,7 @@ def _peek_first_nonempty_n_fields(f, fsize: int) -> int | None:
         hdr = f.read(8)
         if len(hdr) < 8:
             break
-        ne, nf = struct.unpack('>II', hdr)
+        ne, nf = struct.unpack(">II", hdr)
         if ne > 0:
             f.seek(0)
             return nf
@@ -165,7 +165,7 @@ def read_ssort(filepath: str | Path) -> list[dict]:
     """
     filepath = str(filepath)
     fsize = os.path.getsize(filepath)
-    with open(filepath, 'rb') as f:
+    with open(filepath, "rb") as f:
         nf_first = _peek_first_nonempty_n_fields(f, fsize)
         if nf_first == V16_NFIELDS:
             return _read_ssort_v16(f, fsize)
@@ -184,17 +184,15 @@ def _read_ssort_v10(f, fsize: int) -> list[dict]:
         hdr = f.read(8)
         if len(hdr) < 8:
             break
-        n_entries, n_fields = struct.unpack('>II', hdr)
+        n_entries, n_fields = struct.unpack(">II", hdr)
 
         if n_entries == 0:
             # Empty channel-trial: no payload, no metadata available
-            records.append(_empty_record('v10', n_fields))
+            records.append(_empty_record("v10", n_fields))
             continue
 
         if n_fields < 2:
-            raise ValueError(
-                f"Variant A .ssort requires n_fields >= 2, got {n_fields}"
-            )
+            raise ValueError(f"Variant A .ssort requires n_fields >= 2, got {n_fields}")
 
         nbytes = n_entries * n_fields * 4
         if nbytes > fsize - f.tell():
@@ -203,7 +201,7 @@ def _read_ssort_v10(f, fsize: int) -> list[dict]:
                 f"({nbytes} bytes) but only {fsize - f.tell()} bytes remain"
             )
         raw = f.read(nbytes)
-        block = np.frombuffer(raw, dtype='>f4').reshape(n_entries, n_fields)
+        block = np.frombuffer(raw, dtype=">f4").reshape(n_entries, n_fields)
 
         header = block[0]
         channel_idx = int(header[0])
@@ -214,43 +212,63 @@ def _read_ssort_v10(f, fsize: int) -> list[dict]:
         # Trust the row count over the header's declared n_spikes when
         # they disagree (header is a denormalization and can be stale).
         actual_n_spikes = n_entries - 1
-        n_spikes = min(declared_n_spikes, actual_n_spikes) if declared_n_spikes >= 0 \
-            else actual_n_spikes
+        n_spikes = (
+            min(declared_n_spikes, actual_n_spikes) if declared_n_spikes >= 0 else actual_n_spikes
+        )
 
         if n_spikes > 0:
-            rows = block[1:1 + n_spikes]
+            rows = block[1 : 1 + n_spikes]
             labels = rows[:, 0].astype(np.int32)
             spike_indices = rows[:, 1].astype(np.float32)
-            amp_max = rows[:, 2].astype(np.float32) if n_fields > 2 \
+            amp_max = (
+                rows[:, 2].astype(np.float32)
+                if n_fields > 2
                 else np.zeros(n_spikes, dtype=np.float32)
-            amp_min = rows[:, 3].astype(np.float32) if n_fields > 3 \
+            )
+            amp_min = (
+                rows[:, 3].astype(np.float32)
+                if n_fields > 3
                 else np.zeros(n_spikes, dtype=np.float32)
-            peak_to_peak = rows[:, 4].astype(np.float32) if n_fields > 4 \
+            )
+            peak_to_peak = (
+                rows[:, 4].astype(np.float32)
+                if n_fields > 4
                 else np.zeros(n_spikes, dtype=np.float32)
-            width = rows[:, 5].astype(np.float32) if n_fields > 5 \
+            )
+            width = (
+                rows[:, 5].astype(np.float32)
+                if n_fields > 5
                 else np.zeros(n_spikes, dtype=np.float32)
-            features = rows[:, 6:].astype(np.float32) if n_fields > 6 \
+            )
+            features = (
+                rows[:, 6:].astype(np.float32)
+                if n_fields > 6
                 else np.empty((n_spikes, 0), dtype=np.float32)
+            )
         else:
-            labels, spike_indices, amp_max, amp_min, \
-                peak_to_peak, width, features = _empty_spike_arrays(
-                    'v10', n_fields,
+            labels, spike_indices, amp_max, amp_min, peak_to_peak, width, features = (
+                _empty_spike_arrays(
+                    "v10",
+                    n_fields,
                 )
+            )
 
-        records.append({
-            'channel_idx': channel_idx,
-            'n_spikes': n_spikes,
-            'trial_idx': trial_idx,
-            'stim_condition': stim_condition,
-            'variant': 'v10',
-            'labels': labels,
-            'spike_indices': spike_indices,
-            'amp_max': amp_max,
-            'amp_min': amp_min,
-            'peak_to_peak': peak_to_peak,
-            'width': width,
-            'features': features,
-        })
+        records.append(
+            {
+                "channel_idx": channel_idx,
+                "n_spikes": n_spikes,
+                "trial_idx": trial_idx,
+                "stim_condition": stim_condition,
+                "variant": "v10",
+                "labels": labels,
+                "spike_indices": spike_indices,
+                "amp_max": amp_max,
+                "amp_min": amp_min,
+                "peak_to_peak": peak_to_peak,
+                "width": width,
+                "features": features,
+            }
+        )
     return records
 
 
@@ -266,10 +284,10 @@ def _read_ssort_v16(f, fsize: int) -> list[dict]:
         hdr = f.read(8)
         if len(hdr) < 8:
             break
-        n_entries, n_fields = struct.unpack('>II', hdr)
+        n_entries, n_fields = struct.unpack(">II", hdr)
 
         if n_entries == 0:
-            records.append(_empty_record('v16', V16_NFIELDS))
+            records.append(_empty_record("v16", V16_NFIELDS))
             continue
 
         if n_fields != V16_NFIELDS:
@@ -285,7 +303,7 @@ def _read_ssort_v16(f, fsize: int) -> list[dict]:
                 f"({nbytes} bytes) but only {fsize - f.tell()} bytes remain"
             )
         raw = f.read(nbytes)
-        block = np.frombuffer(raw, dtype='>f4').reshape(n_entries, n_fields)
+        block = np.frombuffer(raw, dtype=">f4").reshape(n_entries, n_fields)
 
         n_spikes = n_entries
         channel_idx = int(block[0, 0])
@@ -300,20 +318,22 @@ def _read_ssort_v16(f, fsize: int) -> list[dict]:
         width = block[:, 9].astype(np.float32)
         features = block[:, 10:].astype(np.float32)
 
-        records.append({
-            'channel_idx': channel_idx,
-            'n_spikes': n_spikes,
-            'trial_idx': trial_idx,
-            'stim_condition': stim_condition,
-            'variant': 'v16',
-            'labels': labels,
-            'spike_indices': spike_indices,
-            'amp_max': amp_max,
-            'amp_min': amp_min,
-            'peak_to_peak': peak_to_peak,
-            'width': width,
-            'features': features,
-        })
+        records.append(
+            {
+                "channel_idx": channel_idx,
+                "n_spikes": n_spikes,
+                "trial_idx": trial_idx,
+                "stim_condition": stim_condition,
+                "variant": "v16",
+                "labels": labels,
+                "spike_indices": spike_indices,
+                "amp_max": amp_max,
+                "amp_min": amp_min,
+                "peak_to_peak": peak_to_peak,
+                "width": width,
+                "features": features,
+            }
+        )
     return records
 
 
@@ -324,10 +344,10 @@ def _read_ssort_v16(f, fsize: int) -> list[dict]:
 
 def _n_features_for_variant(variant: str, n_fields: int) -> int:
     """Number of trailing 'feature' columns for a given variant/n_fields."""
-    if variant == 'v10':
+    if variant == "v10":
         # Cols 0..5 are named (label, idx, amp_max, amp_min, p2p, width)
         return max(n_fields - 6, 0)
-    if variant == 'v16':
+    if variant == "v16":
         # Cols 0..9 are named/metadata
         return max(n_fields - 10, 0)
     raise ValueError(f"Unknown ssort variant {variant!r}")
@@ -338,13 +358,13 @@ def _empty_spike_arrays(variant: str, n_fields: int):
     arrays for a record with ``n_spikes == 0``."""
     n_feat = _n_features_for_variant(variant, n_fields)
     return (
-        np.empty(0, dtype=np.int32),               # labels
-        np.empty(0, dtype=np.float32),             # spike_indices
-        np.empty(0, dtype=np.float32),             # amp_max
-        np.empty(0, dtype=np.float32),             # amp_min
-        np.empty(0, dtype=np.float32),             # peak_to_peak
-        np.empty(0, dtype=np.float32),             # width
-        np.empty((0, n_feat), dtype=np.float32),   # features
+        np.empty(0, dtype=np.int32),  # labels
+        np.empty(0, dtype=np.float32),  # spike_indices
+        np.empty(0, dtype=np.float32),  # amp_max
+        np.empty(0, dtype=np.float32),  # amp_min
+        np.empty(0, dtype=np.float32),  # peak_to_peak
+        np.empty(0, dtype=np.float32),  # width
+        np.empty((0, n_feat), dtype=np.float32),  # features
     )
 
 
@@ -356,21 +376,22 @@ def _empty_record(variant: str, n_fields: int) -> dict:
     from the record's index in the returned list.
     """
     labels, indices, amax, amin, p2p, width, feats = _empty_spike_arrays(
-        variant, n_fields,
+        variant,
+        n_fields,
     )
     return {
-        'channel_idx': 0,
-        'n_spikes': 0,
-        'trial_idx': 0,
-        'stim_condition': 0,
-        'variant': variant,
-        'labels': labels,
-        'spike_indices': indices,
-        'amp_max': amax,
-        'amp_min': amin,
-        'peak_to_peak': p2p,
-        'width': width,
-        'features': feats,
+        "channel_idx": 0,
+        "n_spikes": 0,
+        "trial_idx": 0,
+        "stim_condition": 0,
+        "variant": variant,
+        "labels": labels,
+        "spike_indices": indices,
+        "amp_max": amax,
+        "amp_min": amin,
+        "peak_to_peak": p2p,
+        "width": width,
+        "features": feats,
     }
 
 
@@ -430,21 +451,31 @@ def write_ssort(
     if n_fields == V16_NFIELDS:
         _write_ssort_v16(
             filepath,
-            labels_per_record, spike_indices_per_record,
+            labels_per_record,
+            spike_indices_per_record,
             features_per_record,
-            channel_indices, trial_indices, stim_conditions,
-            amp_max_per_record, amp_min_per_record,
-            peak_to_peak_per_record, width_per_record,
+            channel_indices,
+            trial_indices,
+            stim_conditions,
+            amp_max_per_record,
+            amp_min_per_record,
+            peak_to_peak_per_record,
+            width_per_record,
         )
     else:
         _write_ssort_v10(
             filepath,
-            labels_per_record, spike_indices_per_record,
+            labels_per_record,
+            spike_indices_per_record,
             features_per_record,
             n_fields,
-            channel_indices, trial_indices, stim_conditions,
-            amp_max_per_record, amp_min_per_record,
-            peak_to_peak_per_record, width_per_record,
+            channel_indices,
+            trial_indices,
+            stim_conditions,
+            amp_max_per_record,
+            amp_min_per_record,
+            peak_to_peak_per_record,
+            width_per_record,
         )
 
 
@@ -454,41 +485,47 @@ def write_ssort(
 
 
 def _write_ssort_v10(
-    filepath, labels_per_record, spike_indices_per_record,
-    features_per_record, n_fields,
-    channel_indices, trial_indices, stim_conditions,
-    amp_max_per_record, amp_min_per_record,
-    peak_to_peak_per_record, width_per_record,
+    filepath,
+    labels_per_record,
+    spike_indices_per_record,
+    features_per_record,
+    n_fields,
+    channel_indices,
+    trial_indices,
+    stim_conditions,
+    amp_max_per_record,
+    amp_min_per_record,
+    peak_to_peak_per_record,
+    width_per_record,
 ) -> None:
     if n_fields < 2:
-        raise ValueError(
-            f"Variant A .ssort requires n_fields >= 2, got {n_fields}"
-        )
+        raise ValueError(f"Variant A .ssort requires n_fields >= 2, got {n_fields}")
     n_records = len(labels_per_record)
 
-    with open(filepath, 'wb') as f:
+    with open(filepath, "wb") as f:
         for rec_idx in range(n_records):
             lab = np.asarray(labels_per_record[rec_idx], dtype=np.float32)
             idx = np.asarray(
-                spike_indices_per_record[rec_idx], dtype=np.float32,
+                spike_indices_per_record[rec_idx],
+                dtype=np.float32,
             )
             n_spikes = len(lab)
 
             # Empty record -> [0, 0] sentinel
-            if n_spikes == 0 and not _has_data(rec_idx, features_per_record,
-                                               amp_max_per_record,
-                                               amp_min_per_record,
-                                               peak_to_peak_per_record,
-                                               width_per_record):
-                f.write(struct.pack('>II', 0, 0))
+            if n_spikes == 0 and not _has_data(
+                rec_idx,
+                features_per_record,
+                amp_max_per_record,
+                amp_min_per_record,
+                peak_to_peak_per_record,
+                width_per_record,
+            ):
+                f.write(struct.pack(">II", 0, 0))
                 continue
 
             # Header row
             header = np.zeros(n_fields, dtype=np.float32)
-            header[0] = float(
-                channel_indices[rec_idx]
-                if channel_indices is not None else rec_idx
-            )
+            header[0] = float(channel_indices[rec_idx] if channel_indices is not None else rec_idx)
             header[1] = float(n_spikes)
             if trial_indices is not None and n_fields > 2:
                 header[2] = float(trial_indices[rec_idx])
@@ -496,8 +533,8 @@ def _write_ssort_v10(
                 header[3] = float(stim_conditions[rec_idx])
 
             n_entries = 1 + n_spikes
-            f.write(struct.pack('>II', n_entries, n_fields))
-            f.write(header.astype('>f4').tobytes())
+            f.write(struct.pack(">II", n_entries, n_fields))
+            f.write(header.astype(">f4").tobytes())
 
             if n_spikes > 0:
                 rows = np.zeros((n_spikes, n_fields), dtype=np.float32)
@@ -511,13 +548,18 @@ def _write_ssort_v10(
                 # Features start at column 6
                 if features_per_record is not None:
                     feat = features_per_record[rec_idx]
-                    if (feat is not None and getattr(feat, 'ndim', 0) == 2
-                            and feat.shape[1] > 0 and n_fields > 6):
+                    if (
+                        feat is not None
+                        and getattr(feat, "ndim", 0) == 2
+                        and feat.shape[1] > 0
+                        and n_fields > 6
+                    ):
                         cols = min(feat.shape[1], n_fields - 6)
-                        rows[:, 6:6 + cols] = np.asarray(
-                            feat[:, :cols], dtype=np.float32,
+                        rows[:, 6 : 6 + cols] = np.asarray(
+                            feat[:, :cols],
+                            dtype=np.float32,
                         )
-                f.write(rows.astype('>f4').tobytes())
+                f.write(rows.astype(">f4").tobytes())
 
 
 # ---------------------------------------------------------------------------
@@ -526,37 +568,37 @@ def _write_ssort_v10(
 
 
 def _write_ssort_v16(
-    filepath, labels_per_record, spike_indices_per_record,
+    filepath,
+    labels_per_record,
+    spike_indices_per_record,
     features_per_record,
-    channel_indices, trial_indices, stim_conditions,
-    amp_max_per_record, amp_min_per_record,
-    peak_to_peak_per_record, width_per_record,
+    channel_indices,
+    trial_indices,
+    stim_conditions,
+    amp_max_per_record,
+    amp_min_per_record,
+    peak_to_peak_per_record,
+    width_per_record,
 ) -> None:
     n_records = len(labels_per_record)
     n_fields = V16_NFIELDS
 
-    with open(filepath, 'wb') as f:
+    with open(filepath, "wb") as f:
         for rec_idx in range(n_records):
             lab = np.asarray(labels_per_record[rec_idx], dtype=np.float32)
             idx = np.asarray(
-                spike_indices_per_record[rec_idx], dtype=np.float32,
+                spike_indices_per_record[rec_idx],
+                dtype=np.float32,
             )
             n_spikes = len(lab)
 
             if n_spikes == 0:
-                f.write(struct.pack('>II', 0, 0))
+                f.write(struct.pack(">II", 0, 0))
                 continue
 
-            chan = float(
-                channel_indices[rec_idx]
-                if channel_indices is not None else rec_idx
-            )
-            trial = float(
-                trial_indices[rec_idx] if trial_indices is not None else 0
-            )
-            stim = float(
-                stim_conditions[rec_idx] if stim_conditions is not None else 0
-            )
+            chan = float(channel_indices[rec_idx] if channel_indices is not None else rec_idx)
+            trial = float(trial_indices[rec_idx] if trial_indices is not None else 0)
+            stim = float(stim_conditions[rec_idx] if stim_conditions is not None else 0)
 
             rows = np.zeros((n_spikes, n_fields), dtype=np.float32)
             rows[:, 0] = chan
@@ -572,15 +614,15 @@ def _write_ssort_v16(
             # Features start at column 10
             if features_per_record is not None:
                 feat = features_per_record[rec_idx]
-                if (feat is not None and getattr(feat, 'ndim', 0) == 2
-                        and feat.shape[1] > 0):
+                if feat is not None and getattr(feat, "ndim", 0) == 2 and feat.shape[1] > 0:
                     cols = min(feat.shape[1], n_fields - 10)
-                    rows[:, 10:10 + cols] = np.asarray(
-                        feat[:, :cols], dtype=np.float32,
+                    rows[:, 10 : 10 + cols] = np.asarray(
+                        feat[:, :cols],
+                        dtype=np.float32,
                     )
 
-            f.write(struct.pack('>II', n_spikes, n_fields))
-            f.write(rows.astype('>f4').tobytes())
+            f.write(struct.pack(">II", n_spikes, n_fields))
+            f.write(rows.astype(">f4").tobytes())
 
 
 # ---------------------------------------------------------------------------

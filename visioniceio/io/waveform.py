@@ -34,12 +34,12 @@ def read_swave_new(filepath: str | Path) -> tuple[list[np.ndarray], int]:
     data: list[np.ndarray] = []
     wf_pts = 0
     fsize = os.path.getsize(filepath)
-    with open(filepath, 'rb') as f:
+    with open(filepath, "rb") as f:
         while f.tell() < fsize:
             raw_hdr = f.read(8)
             if len(raw_hdr) < 8:
                 break
-            count, pts = struct.unpack('>II', raw_hdr)
+            count, pts = struct.unpack(">II", raw_hdr)
             if not wf_pts:
                 wf_pts = pts
             nbytes = count * pts * 2
@@ -49,9 +49,5 @@ def read_swave_new(filepath: str | Path) -> tuple[list[np.ndarray], int]:
                     f"({nbytes} bytes) but only {fsize - f.tell()} bytes remain"
                 )
             raw = _read_exact(f, nbytes)
-            data.append(
-                np.frombuffer(raw, dtype='>i2')
-                .reshape(count, pts)
-                .astype(np.int16)
-            )
+            data.append(np.frombuffer(raw, dtype=">i2").reshape(count, pts).astype(np.int16))
     return data, wf_pts

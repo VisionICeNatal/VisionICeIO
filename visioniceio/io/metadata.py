@@ -21,6 +21,7 @@ from ._helpers import (
 # Plain-text metadata (-ifo.txt)
 # ---------------------------------------------------------------------------
 
+
 def read_metadata(filepath: str | Path) -> dict:
     """Parse metadata from a plain-text ``key: value`` file.
 
@@ -37,12 +38,12 @@ def read_metadata(filepath: str | Path) -> dict:
     """
     result: dict = {}
     try:
-        with open(str(filepath), encoding='utf-8') as f:
+        with open(str(filepath), encoding="utf-8") as f:
             for line in f:
                 line = line.strip()
-                if not line or ':' not in line:
+                if not line or ":" not in line:
                     continue
-                key, val = map(str.strip, line.split(':', 1))
+                key, val = map(str.strip, line.split(":", 1))
                 result[key] = _parse_metadata_value(val)
     except UnicodeDecodeError:
         # File is binary, not text -- return empty dict so callers can
@@ -54,6 +55,7 @@ def read_metadata(filepath: str | Path) -> dict:
 # ---------------------------------------------------------------------------
 # Binary DLTG metadata (.ifo)
 # ---------------------------------------------------------------------------
+
 
 def read_metadata_ifo(filepath: str | Path) -> dict:
     """Read metadata from a binary ``.ifo`` DLTG file.
@@ -81,7 +83,7 @@ def read_metadata_ifo(filepath: str | Path) -> dict:
 
     # --- Try reading the DLTG container ---
     try:
-        with open(filepath, 'rb') as f:
+        with open(filepath, "rb") as f:
             _ndim, offsets, _desc = _read_dltg_header(f)
             f.seek(int(offsets[0]))
             data = f.read()
@@ -102,53 +104,61 @@ def read_metadata_ifo(filepath: str | Path) -> dict:
         pos += 8
 
         # Skip two PTH0 path records (scan for second, then skip it)
-        pth0_1 = data.find(b'PTH0', pos)
+        pth0_1 = data.find(b"PTH0", pos)
         if pth0_1 < 0:
             return {}
-        pth0_2 = data.find(b'PTH0', pth0_1 + 4)
+        pth0_2 = data.find(b"PTH0", pth0_1 + 4)
         if pth0_2 < 0:
             return {}
         if pth0_2 + 8 > len(data):
             return read_metadata(filepath)
-        rec2_size = struct.unpack_from('>I', data, pth0_2 + 4)[0]
+        rec2_size = struct.unpack_from(">I", data, pth0_2 + 4)[0]
         pos = pth0_2 + 8 + rec2_size
 
         # --- Numeric metadata ---
-        fmt = '>IfIfIIIIII'
+        fmt = ">IfIfIIIIII"
         fields = struct.unpack_from(fmt, data, pos)
         pos += struct.calcsize(fmt)
         (
-            n_trials, max_trial_length,
-            _unk1, _unk2,
-            _unk3, _unk4,
+            n_trials,
+            max_trial_length,
+            _unk1,
+            _unk2,
+            _unk3,
+            _unk4,
             spike_sampling_freq,
             _unk5,
             analog_sampling_freq,
             _unk6,
         ) = fields
 
-        fmt2 = '>IIIIIIII'
+        fmt2 = ">IIIIIIII"
         fields2 = struct.unpack_from(fmt2, data, pos)
         pos += struct.calcsize(fmt2)
         (
-            n_spike_ch, n_waveform_ch, n_analog_ch, n_event_ch,
-            _unk7, _unk8, _unk9,
+            n_spike_ch,
+            n_waveform_ch,
+            n_analog_ch,
+            n_event_ch,
+            _unk7,
+            _unk8,
+            _unk9,
             n_points_waveform,
         ) = fields2
 
         return {
-            'RecordName': record_name,
-            'ProjectName': project_name,
-            'NofTrials': n_trials,
-            'MaxTrialLength': int(max_trial_length),
-            'SpikeSamplingFrequency': spike_sampling_freq,
-            'SpikewaveformSamplingFrequency': spike_sampling_freq,
-            'AnalogSamplingFrequency': analog_sampling_freq,
-            'NofSpikeChannels': n_spike_ch,
-            'NofSpikewaveformChannels': n_waveform_ch,
-            'NofAnalogChannels': n_analog_ch,
-            'NofEventChannels': n_event_ch,
-            'NofPointsSpikewaveform': n_points_waveform,
+            "RecordName": record_name,
+            "ProjectName": project_name,
+            "NofTrials": n_trials,
+            "MaxTrialLength": int(max_trial_length),
+            "SpikeSamplingFrequency": spike_sampling_freq,
+            "SpikewaveformSamplingFrequency": spike_sampling_freq,
+            "AnalogSamplingFrequency": analog_sampling_freq,
+            "NofSpikeChannels": n_spike_ch,
+            "NofSpikewaveformChannels": n_waveform_ch,
+            "NofAnalogChannels": n_analog_ch,
+            "NofEventChannels": n_event_ch,
+            "NofPointsSpikewaveform": n_points_waveform,
         }
     except (struct.error, UnicodeDecodeError, IndexError):
         # If binary parsing fails, try plain-text fallback
@@ -158,6 +168,7 @@ def read_metadata_ifo(filepath: str | Path) -> dict:
 # ---------------------------------------------------------------------------
 # New-format PTH0 metadata (.info)
 # ---------------------------------------------------------------------------
+
 
 def read_info_new(filepath: str | Path) -> dict:
     """Read a new-format ``.info`` metadata file (PTH0 header).
@@ -204,16 +215,14 @@ def read_info_new(filepath: str | Path) -> dict:
     if not os.path.exists(filepath):
         raise FileNotFoundError(f"File not found: {filepath}")
 
-    with open(filepath, 'rb') as f:
+    with open(filepath, "rb") as f:
         data = f.read()
 
-    if len(data) < 4 or data[:4] != b'PTH0':
-        raise ValueError(
-            f"Expected PTH0 header, got {data[:4]!r}"
-        )
+    if len(data) < 4 or data[:4] != b"PTH0":
+        raise ValueError(f"Expected PTH0 header, got {data[:4]!r}")
 
     # --- Skip two PTH0 path records ---
-    second_pth0 = data.find(b'PTH0', 4)
+    second_pth0 = data.find(b"PTH0", 4)
     if second_pth0 < 0:
         raise ValueError("Could not find second PTH0 record")
 
@@ -222,7 +231,7 @@ def read_info_new(filepath: str | Path) -> dict:
             f"Second PTH0 record at offset {second_pth0} truncated: "
             f"need 8 bytes for header but only {len(data) - second_pth0} remain"
         )
-    record2_size = struct.unpack_from('>I', data, second_pth0 + 4)[0]
+    record2_size = struct.unpack_from(">I", data, second_pth0 + 4)[0]
     # Record 2 layout: magic(4) + size_field(4) + data(record2_size)
     pos = second_pth0 + 8 + record2_size
     # Skip 4-byte zero-padding after record 2
@@ -235,7 +244,7 @@ def read_info_new(filepath: str | Path) -> dict:
     pos += 32
 
     # --- Numeric metadata fields ---
-    meta_fmt = '>IIIfIIfI'
+    meta_fmt = ">IIIfIIfI"
     meta_size = struct.calcsize(meta_fmt)
     if pos + meta_size > len(data):
         raise EOFError(
@@ -257,14 +266,13 @@ def read_info_new(filepath: str | Path) -> dict:
 
     if pos + 12 > len(data):
         raise EOFError(
-            f"Channel counts at pos {pos}: need 12 bytes "
-            f"but only {len(data) - pos} remain"
+            f"Channel counts at pos {pos}: need 12 bytes but only {len(data) - pos} remain"
         )
-    n_points_waveform = struct.unpack_from('>I', data, pos)[0]
+    n_points_waveform = struct.unpack_from(">I", data, pos)[0]
     pos += 4
-    n_spike_channels = struct.unpack_from('>I', data, pos)[0]
+    n_spike_channels = struct.unpack_from(">I", data, pos)[0]
     pos += 4
-    n_waveform_channels = struct.unpack_from('>I', data, pos)[0]
+    n_waveform_channels = struct.unpack_from(">I", data, pos)[0]
     pos += 4
 
     # --- Spike channel labels (LabView string array, no count prefix) ---
@@ -281,21 +289,21 @@ def read_info_new(filepath: str | Path) -> dict:
 
     # --- Build result dict with same keys as read_metadata ---
     result: dict = {
-        'RecordName': '',
-        'ProjectName': proj_name,
-        'NofTrials': n_trials,
-        'MaxTrialLength': max_trial_length,
-        'SpikeSamplingFrequency': spike_sampling_freq,
-        'SpikewaveformSamplingFrequency': spike_sampling_freq,
-        'AnalogSamplingFrequency': analog_sampling_freq,
-        'NofSpikeChannels': n_spike_channels,
-        'NofSpikewaveformChannels': n_waveform_channels,
-        'NofAnalogChannels': n_spike_channels,
-        'NofEventChannels': 0,
-        'NofPointsSpikewaveform': n_points_waveform,
-        'SpikeChannels': spike_channel_ints,
-        'SpikeWaveformChannels': spike_channel_ints,
-        'AnalogChannels': spike_channel_ints,
+        "RecordName": "",
+        "ProjectName": proj_name,
+        "NofTrials": n_trials,
+        "MaxTrialLength": max_trial_length,
+        "SpikeSamplingFrequency": spike_sampling_freq,
+        "SpikewaveformSamplingFrequency": spike_sampling_freq,
+        "AnalogSamplingFrequency": analog_sampling_freq,
+        "NofSpikeChannels": n_spike_channels,
+        "NofSpikewaveformChannels": n_waveform_channels,
+        "NofAnalogChannels": n_spike_channels,
+        "NofEventChannels": 0,
+        "NofPointsSpikewaveform": n_points_waveform,
+        "SpikeChannels": spike_channel_ints,
+        "SpikeWaveformChannels": spike_channel_ints,
+        "AnalogChannels": spike_channel_ints,
     }
 
     return result

@@ -19,12 +19,12 @@ import numpy as np
 # ---------------------------------------------------------------------------
 
 dtype_map = {
-    'uint32':  ('>u4', 4),
-    'int32':   ('>i4', 4),
-    'uint16':  ('>u2', 2),
-    'int16':   ('>i2', 2),
-    'float32': ('>f4', 4),
-    'float64': ('>f8', 8),
+    "uint32": (">u4", 4),
+    "int32": (">i4", 4),
+    "uint16": (">u2", 2),
+    "int16": (">i2", 2),
+    "float32": (">f4", 4),
+    "float64": (">f8", 8),
 }
 
 
@@ -33,12 +33,12 @@ dtype_map = {
 # ---------------------------------------------------------------------------
 
 NEW_TO_OLD_EXT = {
-    '.swave': '.swa',
-    '.spike': '.spi',
-    '.stim': '.stm',
-    '.analog': '.ana',
-    '.behave': '.bhv',
-    '.info': '.ifo',
+    ".swave": ".swa",
+    ".spike": ".spi",
+    ".stim": ".stm",
+    ".analog": ".ana",
+    ".behave": ".bhv",
+    ".info": ".ifo",
 }
 
 
@@ -46,13 +46,12 @@ NEW_TO_OLD_EXT = {
 # Byte-level helpers
 # ---------------------------------------------------------------------------
 
+
 def _read_exact(f, n: int) -> bytes:
     """Read exactly *n* bytes from *f*, raising on short reads."""
     buf = f.read(n)
     if len(buf) < n:
-        raise EOFError(
-            f"Unexpected end of file: wanted {n} bytes, got {len(buf)}"
-        )
+        raise EOFError(f"Unexpected end of file: wanted {n} bytes, got {len(buf)}")
     return buf
 
 
@@ -71,14 +70,14 @@ def _read_lv_string(data: bytes, pos: int) -> tuple[str, int]:
             f"LabView string: need 4-byte length prefix at pos {pos}, "
             f"but buffer has only {len(data)} bytes"
         )
-    slen = struct.unpack_from('>I', data, pos)[0]
+    slen = struct.unpack_from(">I", data, pos)[0]
     pos += 4
     if pos + slen > len(data):
         raise EOFError(
             f"LabView string: declared length {slen} at pos {pos - 4}, "
             f"but only {len(data) - pos} bytes remain"
         )
-    s = data[pos:pos + slen].decode('ascii', errors='replace')
+    s = data[pos : pos + slen].decode("ascii", errors="replace")
     return s, pos + slen
 
 
@@ -108,7 +107,7 @@ def _read_dltg_offset_block(f, byte_offset: int) -> np.ndarray:
         the meaningful entry count and copy / cast as needed.
     """
     f.seek(byte_offset)
-    return np.frombuffer(_read_exact(f, _DLTG_BLOCK_LEN * 4), dtype='>u4')
+    return np.frombuffer(_read_exact(f, _DLTG_BLOCK_LEN * 4), dtype=">u4")
 
 
 def _read_dltg_header(f):
@@ -149,15 +148,13 @@ def _read_dltg_header(f):
             any sub-table can be fully read.
     """
     magic = _read_exact(f, 4)
-    if magic != b'DTLG':
-        raise ValueError(
-            f"Expected DTLG header, got {magic!r}"
-        )
+    if magic != b"DTLG":
+        raise ValueError(f"Expected DTLG header, got {magic!r}")
     _version = _read_exact(f, 4)
-    ndim = struct.unpack('>I', _read_exact(f, 4))[0]
-    p = struct.unpack('>I', _read_exact(f, 4))[0]
-    ld = struct.unpack('>h', _read_exact(f, 2))[0]
-    descriptor = _read_exact(f, ld).decode('ascii') if ld > 0 else ''
+    ndim = struct.unpack(">I", _read_exact(f, 4))[0]
+    p = struct.unpack(">I", _read_exact(f, 4))[0]
+    ld = struct.unpack(">h", _read_exact(f, 2))[0]
+    descriptor = _read_exact(f, ld).decode("ascii") if ld > 0 else ""
 
     main_tbl = _read_dltg_offset_block(f, p)
 
@@ -171,7 +168,7 @@ def _read_dltg_header(f):
     if ndim > _DLTG_MAX_NDIM:
         # Include the filename when the handle was opened from a path
         # (BytesIO and other in-memory handles have no usable .name).
-        name = getattr(f, 'name', None)
+        name = getattr(f, "name", None)
         file_clause = f" {name!r}" if isinstance(name, str) else ""
         raise ValueError(
             f"DLTG file{file_clause} declares ndim={ndim}, which exceeds "
@@ -187,7 +184,7 @@ def _read_dltg_header(f):
         start = ci * _DLTG_BLOCK_LEN
         take = min(_DLTG_BLOCK_LEN, ndim - start)
         sub = _read_dltg_offset_block(f, int(main_tbl[ci]))
-        offsets[start:start + take] = sub[:take]
+        offsets[start : start + take] = sub[:take]
 
     return ndim, offsets, descriptor
 
@@ -195,6 +192,7 @@ def _read_dltg_header(f):
 # ---------------------------------------------------------------------------
 # Generic DLTG data reader
 # ---------------------------------------------------------------------------
+
 
 def read_data(filename, dtype, nd):
     """Read a DLTG binary file into a list of NumPy arrays.
@@ -218,7 +216,7 @@ def read_data(filename, dtype, nd):
         raise ValueError(f"Unsupported datatype {dtype}")
     np_dtype, datasize = dtype_map[dtype]
 
-    with open(filename, 'rb') as f:
+    with open(filename, "rb") as f:
         ndim, offset, _descriptor = _read_dltg_header(f)
 
         # read each dataset
@@ -227,9 +225,7 @@ def read_data(filename, dtype, nd):
         for off in offset:
             f.seek(int(off))
             # read dimension sizes (C-order)
-            dims = struct.unpack(
-                '>' + 'i' * nd, _read_exact(f, 4 * nd)
-            )
+            dims = struct.unpack(">" + "i" * nd, _read_exact(f, 4 * nd))
             count = int(np.prod(dims))
             nbytes = count * datasize
             remaining = fsize - f.tell()
@@ -240,18 +236,14 @@ def read_data(filename, dtype, nd):
                     f"remain in the file"
                 )
             raw = _read_exact(f, nbytes)
-            arr = np.frombuffer(raw, dtype=np_dtype, count=count).astype(
-                dtype=dtype
-            )
+            arr = np.frombuffer(raw, dtype=np_dtype, count=count).astype(dtype=dtype)
             arr = arr.reshape(dims)
             data.append(arr)
 
     return data
 
 
-def _read_u4_count_prefixed_as_i4(
-    filepath: str | Path, *, label: str
-) -> np.ndarray:
+def _read_u4_count_prefixed_as_i4(filepath: str | Path, *, label: str) -> np.ndarray:
     """Read a ``[uint32_BE count][count × uint32_BE]`` file as int32.
 
     This is the on-disk format shared by new-format ``.stim`` and
@@ -272,17 +264,16 @@ def _read_u4_count_prefixed_as_i4(
         EOFError: If the declared count would extend past EOF.
     """
     fsize = os.path.getsize(filepath)
-    with open(filepath, 'rb') as f:
-        count = struct.unpack('>I', _read_exact(f, 4))[0]
+    with open(filepath, "rb") as f:
+        count = struct.unpack(">I", _read_exact(f, 4))[0]
         nbytes = count * 4
         remaining = fsize - f.tell()
         if nbytes > remaining:
             raise EOFError(
-                f"{label} claims {count} entries ({nbytes} bytes) "
-                f"but only {remaining} bytes remain"
+                f"{label} claims {count} entries ({nbytes} bytes) but only {remaining} bytes remain"
             )
         raw = _read_exact(f, nbytes)
-    return np.frombuffer(raw, dtype='>u4').astype(np.int32)
+    return np.frombuffer(raw, dtype=">u4").astype(np.int32)
 
 
 def _read_dltg_string_datasets(filepath: str | Path) -> list[str]:
@@ -297,24 +288,25 @@ def _read_dltg_string_datasets(filepath: str | Path) -> list[str]:
     Returns:
         List of decoded strings, one per dataset.
     """
-    with open(filepath, 'rb') as f:
+    with open(filepath, "rb") as f:
         ndim, offsets, _descriptor = _read_dltg_header(f)
         strings: list[str] = []
         for off in offsets:
             f.seek(int(off))
             # LabView stores strings as (int32 length, bytes)
-            str_len = struct.unpack('>i', _read_exact(f, 4))[0]
+            str_len = struct.unpack(">i", _read_exact(f, 4))[0]
             raw_bytes = _read_exact(f, str_len)
             try:
-                strings.append(raw_bytes.decode('ascii').strip())
+                strings.append(raw_bytes.decode("ascii").strip())
             except UnicodeDecodeError:
-                strings.append(raw_bytes.decode('latin-1').strip())
+                strings.append(raw_bytes.decode("latin-1").strip())
     return strings
 
 
 # ---------------------------------------------------------------------------
 # Metadata value parsing
 # ---------------------------------------------------------------------------
+
 
 def _parse_metadata_value(val: str):
     """Parse a single metadata value string into a Python type.
@@ -330,25 +322,21 @@ def _parse_metadata_value(val: str):
         Parsed Python object (bool, int, float, list, or str).
     """
     lower = val.lower()
-    if lower in ('yes', 'true'):
+    if lower in ("yes", "true"):
         return True
-    if lower in ('no', 'false'):
+    if lower in ("no", "false"):
         return False
 
-    if ',' in val:
-        items = [item.strip() for item in val.split(',')]
+    if "," in val:
+        items = [item.strip() for item in val.split(",")]
         # European decimal notation: exactly two parts, no whitespace
         # around the comma, and the second part is pure digits.
         # E.g. "250,00" -> 250.0, "-3,50" -> -3.5.
         # List separators always use ", " (with space), so "1, 2" is
         # a two-element list, not a decimal.
-        if (
-            len(items) == 2
-            and items[1].isdigit()
-            and ', ' not in val
-        ):
+        if len(items) == 2 and items[1].isdigit() and ", " not in val:
             try:
-                return float(items[0] + '.' + items[1])
+                return float(items[0] + "." + items[1])
             except ValueError:
                 pass
         # Comma-separated list of values
@@ -364,6 +352,6 @@ def _parse_metadata_value(val: str):
         return int(val)
     except ValueError:
         try:
-            return float(val.replace(',', '.'))
+            return float(val.replace(",", "."))
         except ValueError:
             return val

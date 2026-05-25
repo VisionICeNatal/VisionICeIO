@@ -37,12 +37,7 @@ extensions = [
 ]
 
 mermaid_d3_zoom = False
-mermaid_init_js = (
-    "mermaid.initialize({"
-    "startOnLoad:true,"
-    "flowchart:{useMaxWidth:true}"
-    "});"
-)
+mermaid_init_js = "mermaid.initialize({startOnLoad:true,flowchart:{useMaxWidth:true}});"
 html_css_files = ["custom.css"]
 
 templates_path = ["_templates"]

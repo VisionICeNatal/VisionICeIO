@@ -30,12 +30,12 @@ def read_analog_new(filepath: str | Path) -> list[np.ndarray]:
     """
     data: list[np.ndarray] = []
     fsize = os.path.getsize(filepath)
-    with open(filepath, 'rb') as f:
+    with open(filepath, "rb") as f:
         while f.tell() < fsize:
             raw_hdr = f.read(4)
             if len(raw_hdr) < 4:
                 break
-            count = struct.unpack('>I', raw_hdr)[0]
+            count = struct.unpack(">I", raw_hdr)[0]
             nbytes = count * 2
             if nbytes > fsize - f.tell():
                 raise EOFError(
@@ -43,5 +43,5 @@ def read_analog_new(filepath: str | Path) -> list[np.ndarray]:
                     f"but only {fsize - f.tell()} bytes remain"
                 )
             raw = _read_exact(f, nbytes)
-            data.append(np.frombuffer(raw, dtype='>i2').astype(np.int16))
+            data.append(np.frombuffer(raw, dtype=">i2").astype(np.int16))
     return data
