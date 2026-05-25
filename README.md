@@ -38,6 +38,13 @@ cd VisionICeIO
 pip install -e ".[dev,test,docs]"
 ```
 
+To run the example notebooks (`examples/real_data_exploration.ipynb`),
+also add the `notebook` extra:
+
+```bash
+pip install -e ".[dev,test,docs,notebook]"
+```
+
 ### Requirements
 
 Python >= 3.10, plus `numpy`, `xarray`, `zarr`, and `numcodecs`.

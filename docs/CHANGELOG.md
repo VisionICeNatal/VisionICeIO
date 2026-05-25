@@ -9,6 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Regression tests pinning the v10 empty-record on-disk layout
+  (`TestSsortV10EmptyOnDisk` in `tests/test_io_readers.py`): writer
+  emits header-only, reader still accepts the legacy `[0,0]` sentinel,
+  and a round-trip of mixed empty + non-empty records is byte-identical.
+- Regression tests for the `load_from_zarr` v2/v3 version guard
+  (`TestLoadFromZarrVersionGuard`).
+- Regression test for `Experiment.import_sorting_results` with a
+  per-record array containing a `None` entry (`test_import_with_partial_none_per_record_arrays`).
 - `.ssort` reader now auto-detects two binary variants observed in
   real lab files:
   - Variant A (`n_fields = 10`) — header row followed by `n_spikes`
@@ -34,6 +42,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- `docs/data_format.md` no longer states that empty `.ssort` records
+  are `[0, 0]` "in both variants"; the section now documents v10's
+  header-only convention and v16's `[0, 0]` sentinel separately, with
+  a note that the reader still accepts the legacy `[0, 0]` form for
+  v10 back-compat.
+- Demo-notebook dependencies (`matplotlib`, `ipywidgets`) moved from
+  the orphaned `requirements.txt` into a new ``notebook`` extras in
+  ``pyproject.toml``; ``requirements.txt`` removed.  Install with
+  ``pip install -e ".[notebook]"``.
 - `read_stim_new()` and `read_behave_new()` now share a single
   implementation, `_read_u4_count_prefixed_as_i4()`, in
   `visioniceio.io._helpers`.  The two readers were byte-identical
@@ -53,6 +70,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `write_ssort()` now emits the **header-only** form (`n_entries=1`,
+  48 bytes at `n_fields=10`) for empty channel-trial records in
+  Variant A — matching what the lab sorter actually writes.  The
+  previous implementation collapsed empty v10 records to the 8-byte
+  `[0, 0]` sentinel, which preserved spike data but shrank files by
+  `40 × n_empty` bytes and produced output that didn't byte-match
+  lab fixtures.  Verified on the corpus: 16/16 real v10 `.ssort`
+  files (including `c5607a07.ssort` and `c5102a08_o.ssort`) now
+  round-trip byte-identically.  The reader still accepts the legacy
+  `[0, 0]` form for back-compat with any previously-written file.
+- The module docstring at the top of `visioniceio/io/sorting.py`
+  no longer claims `[0, 0]` is used "in both variants" — only v16
+  uses that sentinel; v10 uses header-only.  This had drifted from
+  the empirical reality of every real-world `.ssort` file in the
+  corpus.
+- `load_from_zarr()` now raises a clear `ValueError` (mentioning the
+  detected store version and the installed zarr version) when given
+  a zarr v3 store while the environment has zarr v2 installed.
+  Previously, xarray's open path eventually surfaced
+  `FileNotFoundError: No such file or directory: '<path>'` against
+  a directory that obviously existed — wrong cause, wrong remedy.
+  Detection looks for a top-level `zarr.json` without a
+  `.zmetadata`, the unambiguous v3 marker.
+- `Experiment.import_sorting_results._per_record` no longer relies
+  on a closure-captured `i` from the enclosing loop; the record
+  index is now passed explicitly.  Same behaviour, less fragile.
+- `read_bhv()` hoists the `np.sort(offsets)` call out of the
+  per-record loop in the raw-block fallback path (was O(n²);
+  unreachable for the lab corpus, but the hoist is free).
+- `Experiment.__init__` no longer writes `_file_format` or
+  `pad_value` attributes that were never read elsewhere — dead
+  state removed.
 - DLTG container reader (`_read_dltg_header` + `read_data`) now
   correctly handles the **two-level offset table** used when
   `ndim > 128`.  The previous implementation assumed a (non-existent)

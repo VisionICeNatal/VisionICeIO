@@ -16,6 +16,7 @@ from visioniceio.io.sorting import read_ssort, write_ssort
 from visioniceio.io.spike import read_spike_new
 from visioniceio.io.stim import read_stim_new
 from visioniceio.io.waveform import read_swave_new
+from visioniceio.io.zarr_io import _check_zarr_version_compat, load_from_zarr
 
 
 def _tmpfile(data: bytes, suffix: str = ".bin") -> Path:
@@ -473,3 +474,211 @@ class TestSsortVariantDetection:
         assert r["peak_to_peak"].tolist() == [280.0]
         assert r["width"].tolist() == [10.0]
         np.testing.assert_array_almost_equal(r["features"][0], [265.5, 10, 20, 30, 40, 50])
+
+
+class TestSsortV10EmptyOnDisk:
+    """The on-disk layout for empty channel-trial records in Variant A.
+
+    Real lab v10 files always use ``n_entries=1`` (header-only) for empty
+    channel-trials, never the 8-byte ``[0, 0]`` sentinel.  These tests
+    pin the writer to that convention, and the reader to accepting both.
+    """
+
+    def test_v10_empty_record_writes_header_only(self):
+        """Empty v10 record on disk: 8-byte header + 1 row of n_fields floats."""
+        labels = [np.array([], dtype=np.int32)]
+        indices = [np.array([], dtype=np.float32)]
+        path = _tmpfile(b"", ".ssort")
+        write_ssort(
+            path,
+            labels,
+            indices,
+            n_fields=10,
+            channel_indices=[3],
+            trial_indices=[7],
+            stim_conditions=[5],
+        )
+        raw = Path(path).read_bytes()
+        # 8 bytes header (n_entries=1, n_fields=10) + 40 bytes header row
+        assert len(raw) == 48
+        n_entries, n_fields = struct.unpack(">II", raw[:8])
+        assert n_entries == 1
+        assert n_fields == 10
+        header = np.frombuffer(raw[8:48], dtype=">f4")
+        # channel=3, n_spikes=0, trial=7, stim=5, then six zeros
+        assert header[0] == 3.0
+        assert header[1] == 0.0
+        assert header[2] == 7.0
+        assert header[3] == 5.0
+        assert np.all(header[4:] == 0.0)
+
+    def test_v10_empty_record_reads_back_with_metadata(self):
+        """The reader recovers channel/trial/stim from a header-only empty
+        record (which the [0,0] sentinel form cannot carry)."""
+        labels = [np.array([], dtype=np.int32)]
+        indices = [np.array([], dtype=np.float32)]
+        path = _tmpfile(b"", ".ssort")
+        write_ssort(
+            path,
+            labels,
+            indices,
+            n_fields=10,
+            channel_indices=[3],
+            trial_indices=[7],
+            stim_conditions=[5],
+        )
+        records = read_ssort(path)
+        assert len(records) == 1
+        r = records[0]
+        assert r["variant"] == "v10"
+        assert r["n_spikes"] == 0
+        assert r["channel_idx"] == 3
+        assert r["trial_idx"] == 7
+        assert r["stim_condition"] == 5
+        assert r["labels"].shape == (0,)
+
+    def test_v10_reader_still_accepts_zero_zero_sentinel(self):
+        """Back-compat: a manually crafted [0, 0] sentinel must still parse.
+
+        This guards against breaking any v10 file that was written by a
+        prior version of write_ssort that used the sentinel form."""
+        # One [0, 0] sentinel record, then one normal 1-spike record.
+        sentinel = struct.pack(">II", 0, 0)
+        row = np.array([0, 1, 0, 0, 0, 0, 0, 0, 0, 0], dtype=">f4")
+        header = np.array([1, 1, 0, 0, 0, 0, 0, 0, 0, 0], dtype=">f4")
+        nonempty = struct.pack(">II", 2, 10) + header.tobytes() + row.tobytes()
+        path = _tmpfile(sentinel + nonempty, ".ssort")
+        records = read_ssort(path)
+        assert len(records) == 2
+        assert records[0]["variant"] == "v10"
+        assert records[0]["n_spikes"] == 0
+        assert records[1]["variant"] == "v10"
+        assert records[1]["n_spikes"] == 1
+
+    def test_v10_full_roundtrip_byte_identical_for_mixed_empty(self):
+        """Write a mix of empty + non-empty v10 records, read back, write
+        again -> the second-pass file must be byte-identical to the first."""
+        labels = [
+            np.array([], dtype=np.int32),
+            np.array([1, 2, 3], dtype=np.int32),
+            np.array([], dtype=np.int32),
+            np.array([4], dtype=np.int32),
+        ]
+        indices = [
+            np.array([], dtype=np.float32),
+            np.array([10.0, 20.0, 30.0], dtype=np.float32),
+            np.array([], dtype=np.float32),
+            np.array([55.0], dtype=np.float32),
+        ]
+        amp_max = [
+            np.array([], dtype=np.float32),
+            np.array([100.0, 110.0, 120.0], dtype=np.float32),
+            np.array([], dtype=np.float32),
+            np.array([130.0], dtype=np.float32),
+        ]
+        path1 = _tmpfile(b"", ".ssort")
+        path2 = _tmpfile(b"", ".ssort")
+        common_kwargs = dict(
+            n_fields=10,
+            channel_indices=[0, 1, 2, 3],
+            trial_indices=[0, 0, 1, 1],
+            stim_conditions=[5, 5, 6, 6],
+            amp_max_per_record=amp_max,
+        )
+        write_ssort(path1, labels, indices, **common_kwargs)
+        records = read_ssort(path1)
+        # Re-write from the parsed records and compare byte-for-byte
+        write_ssort(
+            path2,
+            [r["labels"] for r in records],
+            [r["spike_indices"] for r in records],
+            n_fields=10,
+            channel_indices=[r["channel_idx"] for r in records],
+            trial_indices=[r["trial_idx"] for r in records],
+            stim_conditions=[r["stim_condition"] for r in records],
+            amp_max_per_record=[r["amp_max"] for r in records],
+        )
+        assert Path(path1).read_bytes() == Path(path2).read_bytes()
+
+
+# ---------------------------------------------------------------------------
+# load_from_zarr — version mismatch guard
+# ---------------------------------------------------------------------------
+
+
+class TestLoadFromZarrVersionGuard:
+    """``load_from_zarr`` surfaces a clear error for a v3 store opened with
+    zarr v2 (otherwise xarray re-raises as a misleading FileNotFoundError
+    against a path that clearly exists)."""
+
+    def _make_v3_marker_store(self, tmp_path: Path) -> Path:
+        """Create a directory that looks like a zarr v3 store (top-level
+        ``zarr.json``, no ``.zmetadata``).  We don't need a real store —
+        the version check runs before xarray touches it."""
+        store = tmp_path / "fake_v3.zarr"
+        store.mkdir()
+        (store / "zarr.json").write_text('{"zarr_format": 3, "node_type": "group"}')
+        return store
+
+    def _make_v2_marker_store(self, tmp_path: Path) -> Path:
+        """Directory with a ``.zmetadata`` marker (looks like consolidated
+        zarr v2)."""
+        store = tmp_path / "fake_v2.zarr"
+        store.mkdir()
+        (store / ".zmetadata").write_text('{"zarr_consolidated_format": 1, "metadata": {}}')
+        return store
+
+    def test_v3_store_under_v2_raises_clear_error(self, tmp_path, monkeypatch):
+        """When zarr is v2 and the store has ``zarr.json`` (no ``.zmetadata``),
+        we raise ValueError with a useful message — not the misleading
+        FileNotFoundError xarray would surface."""
+        import zarr
+
+        monkeypatch.setattr(zarr, "__version__", "2.18.3")
+        store = self._make_v3_marker_store(tmp_path)
+        with pytest.raises(ValueError, match=r"v3 format.*installed zarr is v2"):
+            _check_zarr_version_compat(str(store))
+
+    def test_v3_store_under_v3_no_error(self, tmp_path, monkeypatch):
+        """Under zarr v3, the same store must not trigger the version check."""
+        import zarr
+
+        monkeypatch.setattr(zarr, "__version__", "3.0.0")
+        store = self._make_v3_marker_store(tmp_path)
+        # Must not raise
+        _check_zarr_version_compat(str(store))
+
+    def test_v2_store_under_v2_no_error(self, tmp_path, monkeypatch):
+        """A v2 store under zarr v2 must not trigger the version check."""
+        import zarr
+
+        monkeypatch.setattr(zarr, "__version__", "2.18.3")
+        store = self._make_v2_marker_store(tmp_path)
+        _check_zarr_version_compat(str(store))
+
+    def test_v2_marker_alongside_v3_marker_no_error(self, tmp_path, monkeypatch):
+        """If both markers are present (unusual but valid), defer to xarray."""
+        import zarr
+
+        monkeypatch.setattr(zarr, "__version__", "2.18.3")
+        store = tmp_path / "mixed.zarr"
+        store.mkdir()
+        (store / "zarr.json").write_text("{}")
+        (store / ".zmetadata").write_text("{}")
+        _check_zarr_version_compat(str(store))
+
+    def test_load_from_zarr_missing_path_raises_filenotfound(self, tmp_path):
+        """Pre-existing behaviour: a non-existent path raises FileNotFoundError."""
+        missing = tmp_path / "nope.zarr"
+        with pytest.raises(FileNotFoundError, match="Zarr store not found"):
+            load_from_zarr(str(missing))
+
+    def test_load_from_zarr_surface_error_path(self, tmp_path, monkeypatch):
+        """End-to-end: load_from_zarr on a v3-only store with zarr v2
+        installed gives the clear ValueError, not FileNotFoundError."""
+        import zarr
+
+        monkeypatch.setattr(zarr, "__version__", "2.18.3")
+        store = self._make_v3_marker_store(tmp_path)
+        with pytest.raises(ValueError, match=r"v3 format.*installed zarr is v2"):
+            load_from_zarr(str(store))

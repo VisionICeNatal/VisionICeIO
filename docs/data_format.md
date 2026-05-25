@@ -185,8 +185,21 @@ Every variant uses the same record framing:
 ```
 
 **Empty channel-trial records** (no spikes detected on that
-channel-trial) are stored as 8 bytes total — `n_entries = 0,
-n_fields = 0`, no payload — in both variants.
+channel-trial) use different on-disk representations in the two
+variants, matching what the lab sorter writes:
+
+- **Variant A (`n_fields = 10`)**: header-only — `n_entries = 1`, the
+  header row stamps `channel_idx`/`trial_idx`/`stim_condition` so
+  positional metadata survives on disk (`n_spikes` in the header is
+  `0`).  At `n_fields = 10` this is `8 + 40 = 48` bytes.
+- **Variant B (`n_fields = 16`)**: sentinel — `n_entries = 0,
+  n_fields = 0`, no payload (8 bytes total).  Channel/trial/stim
+  metadata is unrecoverable from an empty v16 record on disk;
+  callers re-derive it from the record's flat index.
+
+For back-compat, `read_ssort()` also accepts the `[0, 0]` sentinel
+form for Variant A (used by any file written by a pre-2026-05 release
+of `write_ssort`).
 
 ### Variant A — `n_fields = 10` (header row + spike rows)
 

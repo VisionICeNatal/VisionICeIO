@@ -9,8 +9,20 @@ Each record (regardless of variant) starts with::
 
     [n_entries : u32_BE] [n_fields : u32_BE] [n_entries x n_fields x float32_BE]
 
-Empty channel-trial records (no spikes detected) are stored as
-``[0 : u32_BE] [0 : u32_BE]`` (8 bytes, no payload) in both variants.
+Empty channel-trial records (no spikes detected) use different on-disk
+representations in the two variants, matching what the lab sorter emits:
+
+- **Variant A (v10)**: ``n_entries = 1`` — a header row but no spike rows.
+  At ``n_fields = 10`` this is 8 + 40 = 48 bytes.  The header row stamps
+  ``channel_idx`` / ``trial_idx`` / ``stim_condition`` so the positional
+  metadata survives on disk; ``n_spikes`` in the header is ``0``.
+- **Variant B (v16)**: ``[0 : u32_BE] [0 : u32_BE]`` (8 bytes, no payload).
+  Channel / trial / stim metadata is unrecoverable from an empty v16
+  record on disk; callers re-derive it from the record's flat index.
+
+The reader transparently handles both forms (and accepts the ``[0,0]``
+form for v10 as well, for backward compatibility with any pre-fix
+``write_ssort`` output).
 
 Variant A -- ``n_fields == 10`` (typical), header + spike rows
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -511,19 +523,10 @@ def _write_ssort_v10(
             )
             n_spikes = len(lab)
 
-            # Empty record -> [0, 0] sentinel
-            if n_spikes == 0 and not _has_data(
-                rec_idx,
-                features_per_record,
-                amp_max_per_record,
-                amp_min_per_record,
-                peak_to_peak_per_record,
-                width_per_record,
-            ):
-                f.write(struct.pack(">II", 0, 0))
-                continue
-
-            # Header row
+            # Header row: always emitted, even for empty channel-trials.
+            # Real-world v10 files use this header-only representation
+            # (n_entries=1) for empty records — never the [0,0] sentinel.
+            # See module docstring for the full convention.
             header = np.zeros(n_fields, dtype=np.float32)
             header[0] = float(channel_indices[rec_idx] if channel_indices is not None else rec_idx)
             header[1] = float(n_spikes)
@@ -644,19 +647,3 @@ def _fill_named(rows, col, per_record, rec_idx, n_fields):
             f"but got {arr.shape[0]} for record {rec_idx}"
         )
     rows[:, col] = arr
-
-
-def _has_data(rec_idx, *per_record_lists) -> bool:
-    """Return True iff any per-record list has a non-empty entry at rec_idx."""
-    for lst in per_record_lists:
-        if lst is None:
-            continue
-        entry = lst[rec_idx] if rec_idx < len(lst) else None
-        if entry is None:
-            continue
-        try:
-            if np.asarray(entry).size > 0:
-                return True
-        except (TypeError, ValueError):
-            continue
-    return False

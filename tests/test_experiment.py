@@ -211,3 +211,27 @@ class TestImportSortingResults:
         np.testing.assert_array_almost_equal(result[0]["amp_max"], [200.0, 210.0])
         # other named columns default to zeros
         np.testing.assert_array_equal(result[0]["amp_min"], [0.0, 0.0])
+
+    def test_import_with_partial_none_per_record_arrays(self):
+        """An ``amp_max_per_record`` list with a ``None`` entry for one
+        record must zero-fill that record while preserving values for the
+        others.  This guards the formerly closure-captured ``i`` index in
+        ``_per_record``."""
+        exp = _make_minimal_exp(ntrials=2, nelectrodes=1, max_spikes=2)
+        labels = [
+            np.array([1, 2], dtype=np.int32),
+            np.array([3], dtype=np.int32),
+        ]
+        indices = [
+            np.array([10.0, 20.0], dtype=np.float32),
+            np.array([30.0], dtype=np.float32),
+        ]
+        # Record 0 has amp_max data, record 1 explicitly None
+        amp_max = [np.array([200.0, 210.0], dtype=np.float32), None]
+        result = exp.import_sorting_results(
+            labels,
+            indices,
+            amp_max_per_record=amp_max,
+        )
+        np.testing.assert_array_almost_equal(result[0]["amp_max"], [200.0, 210.0])
+        np.testing.assert_array_equal(result[1]["amp_max"], [0.0])

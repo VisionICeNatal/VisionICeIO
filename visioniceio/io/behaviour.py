@@ -67,6 +67,13 @@ def read_bhv(filepath: str | Path) -> dict:
         result["_descriptor"] = descriptor
         result["_n_datasets"] = ndim
 
+        # Pre-sort once for the raw-block fallback's "skip to next offset"
+        # logic (was previously re-sorted per dataset -> O(n^2) for n
+        # datasets).  In practice the fallback is unreachable for the
+        # lab's current corpus, but the dataloop runs over every record
+        # so the hoist is essentially free.
+        sorted_offsets = np.sort(offsets)
+
         for off in offsets:
             f.seek(int(off))
             # Try string interpretation first (int32 length prefix)
@@ -95,7 +102,6 @@ def read_bhv(filepath: str | Path) -> dict:
 
             # Fallback: read remaining bytes until next offset or EOF
             f.seek(int(off))
-            sorted_offsets = np.sort(offsets)
             idx = np.searchsorted(sorted_offsets, off + 1)
             if idx < len(sorted_offsets):
                 next_off = int(sorted_offsets[idx])

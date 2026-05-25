@@ -80,8 +80,6 @@ class Experiment:
         self.name = None
         self.data = None
         self.metadata = None
-        self.pad_value = np.nan
-        self._file_format = None  # 'new' or 'old', set during load
         self.sorting_results = None  # list[dict] | None, populated by load_ssort()
 
     # ------------------------------------------------------------------
@@ -717,11 +715,13 @@ class Experiment:
         if stim_conditions is None:
             stim_conditions = [0] * n_records
 
-        def _per_record(arr_list, n_spikes):
+        def _per_record(arr_list, rec_idx, n_spikes):
             """Resolve a per-record array, returning zeros if missing."""
             if arr_list is None:
                 return np.zeros(n_spikes, dtype=np.float32)
-            entry = arr_list[i] if arr_list[i] is not None else np.zeros(n_spikes, dtype=np.float32)
+            entry = arr_list[rec_idx]
+            if entry is None:
+                return np.zeros(n_spikes, dtype=np.float32)
             return np.asarray(entry, dtype=np.float32)
 
         records: list[dict] = []
@@ -746,10 +746,10 @@ class Experiment:
                     "variant": "v10",
                     "labels": labels,
                     "spike_indices": spike_idx,
-                    "amp_max": _per_record(amp_max_per_record, n_spikes),
-                    "amp_min": _per_record(amp_min_per_record, n_spikes),
-                    "peak_to_peak": _per_record(peak_to_peak_per_record, n_spikes),
-                    "width": _per_record(width_per_record, n_spikes),
+                    "amp_max": _per_record(amp_max_per_record, i, n_spikes),
+                    "amp_min": _per_record(amp_min_per_record, i, n_spikes),
+                    "peak_to_peak": _per_record(peak_to_peak_per_record, i, n_spikes),
+                    "width": _per_record(width_per_record, i, n_spikes),
                     "features": feat,
                 }
             )
