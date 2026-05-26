@@ -1,8 +1,15 @@
 """VisionICeIO -- I/O for the Vision Lab (Natal) LabView data."""
 
+from importlib.metadata import PackageNotFoundError
 from importlib.metadata import version as _pkg_version
 
-__version__ = _pkg_version("visioniceio")
+try:
+    __version__ = _pkg_version("visioniceio")
+except PackageNotFoundError:
+    # Importing from a source checkout that hasn't been `pip install -e`'d.
+    # Without this fallback, the bare `import visioniceio` would crash with
+    # PackageNotFoundError before the user ever gets to call any function.
+    __version__ = "0.0.0-dev"
 
 from .experiment import Experiment
 from .io import (

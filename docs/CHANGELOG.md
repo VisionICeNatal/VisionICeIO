@@ -181,6 +181,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   alongside `self.sorting_results`.  The attribute was only ever set
   inside `_attach_bhv()`, so `hasattr(exp, "behaviour")` was `False`
   on the default `load_bhv=False` path.
+- ``import visioniceio`` no longer crashes with
+  ``PackageNotFoundError`` when run from a source checkout that hasn't
+  been ``pip install -e``'d; ``__version__`` falls back to
+  ``"0.0.0-dev"``.  Adapted from a partial fix in the
+  ``fix/read_dltg_header`` branch (commit ``8d2c59c`` by Jaime Cirne);
+  the offset-table changes in that same branch were deliberately not
+  pulled in -- the two-level addressing implementation already on
+  ``main`` (commit ``69a3d1c`` + refinements) is empirically verified
+  byte-identical to the new-format readers across ~100k records / 23
+  lab datasets, whereas the branch's tree-iteration variant would
+  silently misinterpret record offsets as further sub-table pointers
+  past level 2 and degrade error reporting on truncated files.
 
 ## [0.1.0] - 2026-03-08
 
