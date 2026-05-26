@@ -26,9 +26,14 @@ result as a compressed [Zarr](https://zarr.dev/) store for fast reloading.
 
 ## Installation
 
+`visioniceio` is not yet on PyPI; install directly from git:
+
 ```bash
-pip install visioniceio
+pip install git+https://github.com/VisionICeNatal/VisionICeIO.git
 ```
+
+<!-- TODO: switch to `pip install visioniceio` once the package is
+published on PyPI; until then the git URL is the only source. -->
 
 For development (editable install with extras):
 
