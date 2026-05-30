@@ -239,20 +239,27 @@ class Experiment:
     ) -> np.ndarray:
         """Convert spike sample indices to seconds and pad to *max_spikes*.
 
+        Spike times are stored as **float64**: although these are
+        trial-relative seconds (small values), float32's ~7 significant
+        digits can lose tens of microseconds for longer trials, and
+        downstream (``neural_cca``) compares spike times against the
+        ``stim_window`` in float64. Keeping float64 end-to-end avoids a
+        silent precision cap.
+
         Returns:
-            2-D float32 array ``(n_records, max_spikes)``.
+            2-D float64 array ``(n_records, max_spikes)``.
         """
         return np.array(
             [
                 np.pad(
-                    s.astype(np.float32) / sample_rate,
+                    s.astype(np.float64) / sample_rate,
                     (0, max_spikes - s.shape[0]),
                     "constant",
                     constant_values=np.nan,
                 )
                 for s in spike_data
             ],
-            dtype=np.float32,
+            dtype=np.float64,
         )
 
     @staticmethod

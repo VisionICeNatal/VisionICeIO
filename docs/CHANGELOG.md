@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- `Experiment` now stores `spike_times` as **float64** (was float32).
+  These are trial-relative seconds, but float32's ~7 significant digits
+  drop tens of microseconds on longer trials; downstream (`neural_cca`)
+  compares spike times against `stim_window` in float64, so keeping
+  float64 end-to-end avoids a silent precision cap. Zarr stores written
+  before this change remain readable.
+
 ### Added
 
 - Regression tests pinning the v10 empty-record on-disk layout
