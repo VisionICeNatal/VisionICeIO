@@ -41,6 +41,7 @@ notebook = ["matplotlib", "ipywidgets"]
 [project.urls]
 Repository = "https://github.com/VisionICeNatal/VisionICeIO"
 Documentation = "https://VisionICeNatal.github.io/VisionICeIO/"
+Changelog = "https://github.com/VisionICeNatal/VisionICeIO/blob/main/docs/CHANGELOG.md"
 
 [tool.ruff]
 line-length = 100

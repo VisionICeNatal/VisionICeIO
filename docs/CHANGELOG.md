@@ -5,7 +5,7 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased] - 2026-05-25
+## [Unreleased]
 
 ### Added
 
@@ -78,6 +78,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   return value, and ``snippet_points`` now reflects the actual data
   shape on disk (not just the metadata field) even for old-format
   experiments.
+- CI: `docs.yml` now builds on Python 3.12 (was 3.10) to stay in sync
+  with the sibling repos (`neural_cca`, `VisionICeAnalysis`), and
+  `lint.yml` now pins `ruff==0.15.14` (was unpinned) so a new ruff
+  release can't flap CI on unrelated PRs. Both changes match the
+  bridge's existing CI policy.
+- CI: every workflow now declares a `concurrency` group keyed on
+  workflow + ref (auto-cancels in-flight runs for the same ref) and
+  the `actions/setup-python` step uses `cache: 'pip'` keyed on
+  `pyproject.toml`. Cosmetic-but-real reduction in CI wall-time and
+  Actions minutes spent.
+- `pyproject.toml`: added a `Changelog` URL under `[project.urls]`
+  (pointing at `docs/CHANGELOG.md` on `main`).
 
 ### Fixed
 
@@ -193,6 +205,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   lab datasets, whereas the branch's tree-iteration variant would
   silently misinterpret record offsets as further sub-table pointers
   past level 2 and degrade error reporting on truncated files.
+- Public-API surface: `dtype_map` and `NEW_TO_OLD_EXT` no longer
+  appear in `visioniceio.io.__all__` — both names live in the private
+  module `visioniceio.io._helpers` and were never intended for
+  external consumption. Internal callers (`visioniceio.core_io`,
+  `tests/test_io_helpers.py`) already imported them from the private
+  path, so the public surface is now consistent with the actual
+  layout. No external imports were affected (verified by repo-wide
+  grep prior to the cut).
+- Changelog header for the in-flight section is now plain
+  `## [Unreleased]` (was `## [Unreleased] - 2026-05-25`), matching
+  the Keep-a-Changelog convention — release dates are stamped on
+  the version cut, not on `[Unreleased]`.
+
+### Roadmap
+
+- Add `CITATION.cff` so the repo gets a "Cite this repository" button
+  on GitHub and is indexable by Zenodo/Google Scholar. Co-author the
+  file with Schmidt (UFRN), Wolf (CIDBN), Schwarz; acknowledge PROBRAL
+  funding.
+- Enable GitHub Pages for the docs site (currently the docs *build*
+  succeeds but `https://VisionICeNatal.github.io/VisionICeIO/` returns
+  404 — Pages on a private repo needs a paid plan + source set to
+  *GitHub Actions*).
+- Expose hooks for NWB-relevant metadata at acquisition: extend
+  `Experiment` and the per-data-type readers so optional
+  `session_start_time`, `subject_id`, `brain_area`, `probe`, and
+  `reference_scheme` flow through into the resulting `xr.Dataset`'s
+  `attrs`. The bridge will consume these in its planned
+  `vision_ice_analysis.to_nwb()` exporter; this repo stays NWB-unaware.
+- (Longer-term) An `Experiment.to_nwb()` convenience that runs the
+  bridge's exporter — kept opt-in so the I/O package stays free of a
+  hard `pynwb` dependency.
 
 ## [0.1.0] - 2026-03-08
 

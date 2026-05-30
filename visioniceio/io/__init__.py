@@ -13,7 +13,7 @@ sorting      ``.ssort`` read / write.
 zarr_io      Zarr store reload.
 """
 
-from ._helpers import NEW_TO_OLD_EXT, dtype_map, read_data
+from ._helpers import read_data
 from .analog import read_analog_new
 from .behaviour import read_behave_new, read_bhv
 from .metadata import read_info_new, read_metadata, read_metadata_ifo
@@ -24,9 +24,6 @@ from .waveform import read_swave_new
 from .zarr_io import load_from_zarr
 
 __all__ = [
-    # Constants
-    "dtype_map",
-    "NEW_TO_OLD_EXT",
     # Generic old-format reader
     "read_data",
     # Metadata
